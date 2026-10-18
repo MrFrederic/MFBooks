@@ -1,0 +1,6 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <!-- open book with a play triangle -->
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M3,5.5C5.5,4.2 8.6,4.3 11,5.6V19C8.6,17.8 5.5,17.7 3,19ZM13,5.6C15.4,4.3 18.5,4.2 21,5.5V19C18.5,17.7 15.4,17.8 13,19ZM15,9.2V15.2L19,12.2Z"/>
+</vector>

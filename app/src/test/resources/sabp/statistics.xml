@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?><root>
+    <book>
+        <path>Andy Weir - The Martian</path>
+        <time>2026-10 23</time>
+    </book>
+    <book>
+        <path>Good Omens Chapterized</path>
+        <time>2026-05 11933</time>
+        <time>2026-06 20695</time>
+        <time>2026-07 4318</time>
+    </book>
+    <book>
+        <path>Terry Pratchett - Moving Pictures Discworld, Book 10</path>
+        <time>2026-07 14210</time>
+        <time>2026-10 21525</time>
+    </book>
+    <book>
+        <path>Terry Pretchett - Mort</path>
+        <time>2026-10 1</time>
+    </book>
+    <book>
+        <path>Terry Pretchett - Reaper Man</path>
+        <time>2026-10 1977</time>
+    </book>
+    <book>
+        <path>Terry Pretchett - The Truth</path>
+        <time>2026-10 84</time>
+    </book>
+    <book>
+        <path>Движущиеся картинки</path>
+        <time>2026-07 172</time>
+    </book>
+    <book>
+        <path>Пикник на обочине</path>
+        <time>2026-06 11618</time>
+    </book>
+    <book>
+        <path>Цикл  Ведьмак/8. Сезон гроз</path>
+        <time>2025-03 53</time>
+    </book>
+</root>

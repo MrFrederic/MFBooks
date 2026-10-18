@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Playback / Android Auto strings (playback agent). -->
+<resources>
+    <string name="pb_tab_continue">Continue</string>
+    <string name="pb_tab_new">New</string>
+    <string name="pb_tab_library">Library</string>
+    <string name="pb_tab_finished">Finished</string>
+    <string name="pb_unknown_author">Unknown author</string>
+    <string name="pb_empty_library">Open MFBooks on your phone to add a folder</string>
+    <string name="pb_empty_library_sub">No books yet</string>
+    <string name="pb_left_hm">%1$d h %2$d m left</string>
+    <string name="pb_left_m">%1$d m left</string>
+    <string name="pb_finished">Finished</string>
+    <string name="pb_books_count">%1$d books</string>
+    <string name="pb_rewind_sec">Rewind %1$d s</string>
+    <string name="pb_forward_sec">Forward %1$d s</string>
+    <string name="pb_previous">Previous</string>
+    <string name="pb_next">Next</string>
+    <string name="pb_next_chapter">Next chapter</string>
+    <string name="pb_speed">Speed %1$s</string>
+    <string name="pb_add_bookmark">Add bookmark</string>
+    <string name="pb_bookmark_added">Bookmark added</string>
+    <string name="pb_sleep_off">Sleep timer: off</string>
+    <string name="pb_sleep_on">Sleep timer: on</string>
+    <string name="pb_sleep_15">Sleep timer: 15 min</string>
+    <string name="pb_sleep_30">Sleep timer: 30 min</string>
+    <string name="pb_sleep_60">Sleep timer: 60 min</string>
+    <string name="pb_sleep_eoc">Sleep timer: end of chapter</string>
+</resources>
