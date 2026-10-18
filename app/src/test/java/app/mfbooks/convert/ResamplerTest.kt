@@ -66,6 +66,17 @@ class ResamplerTest {
         assertTrue(rms(y, 1000, y.size - 1000) < 10000 / sqrt(2.0) * 0.05)
     }
 
+    /** OpusTranscoder's chunks rely on this: started on a frame where both grids meet, the output is the single pass's. */
+    @Test fun alignedRestartMatchesSinglePass() {
+        val x = sine(44100, 523.0, 44100 * 2, 2)
+        val full = resample(Resampler(44100, 48000, 2), x, 2)
+        val a0 = 147 * 300                                       // input frame on the 44100/48000 grid (147 ↔ 160)
+        val part = resample(Resampler(44100, 48000, 2), x.copyOfRange(a0 * 2, x.size), 2)
+        val outStart = a0 / 147 * 160
+        for (f in 100 until 20_000) for (c in 0..1)             // after the kernel's warm-up
+            assertEquals("frame $f", full[(outStart + f) * 2 + c], part[f * 2 + c])
+    }
+
     @Test fun passthroughAt48k() {
         val x = sine(48000, 440.0, 4800)
         assertEquals(x.toList(), resample(Resampler(48000, 48000, 1), x, 1).toList())

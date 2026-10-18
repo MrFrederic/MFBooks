@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.car.app.connection.CarConnection
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.Observer
+import androidx.media3.cast.CastPlayer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -64,6 +65,9 @@ class PlaybackService : MediaLibraryService() {
     private val effects = EffectsProcessor()
     private val boost = Boost()
     private lateinit var exo: ExoPlayer
+    private lateinit var pl: Player              // what plays: ExoPlayer or the Cast receiver (see Cast.kt)
+    private var cast: CastPlayer? = null
+    private lateinit var server: MediaServer
     private lateinit var player: BookPlayer
     private lateinit var session: MediaLibrarySession
     private lateinit var sleep: SleepTimer
@@ -103,13 +107,17 @@ class PlaybackService : MediaLibraryService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .setRenderersFactory(EffectsRenderersFactory(this, effects))
             .build()
-        exo.addListener(listener)
         boost.attach(exo.audioSessionId)
+        // The session's player: ExoPlayer, or the Cast receiver while a Cast session runs (CastPlayer switches).
+        server = MediaServer(this)
+        cast = CastSupport.player(this, exo, server)
+        pl = ClipPlayer(cast ?: exo)
+        pl.addListener(listener)
         // ponytail: focus policy settings (pauseOnMessage, stopWhenOthersPlaying, resumeAfterCall) and
         // headsetConnectPlay use Media3's default focus handling for now (§5.2).
-        player = BookPlayer(exo)
-        saver = ProgressSaver(this, exo) { loaded }
-        sleep = SleepTimer(this, exo, scope) { saver.history("SLEEP"); saver.save(sidecar = true) }
+        player = BookPlayer(pl)
+        saver = ProgressSaver(this, pl) { loaded }
+        sleep = SleepTimer(this, pl, scope) { saver.history("SLEEP"); saver.save(sidecar = true) }
         tree = LibraryTree(this)
         val activity = packageManager.getLaunchIntentForPackage(packageName)?.let {
             PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
@@ -143,7 +151,8 @@ class PlaybackService : MediaLibraryService() {
         sleep.release()
         boost.release()
         session.release()
-        exo.release()
+        pl.release() // CastPlayer releases ExoPlayer too
+        server.stop()
         scope.cancel()
         super.onDestroy()
     }
@@ -168,8 +177,8 @@ class PlaybackService : MediaLibraryService() {
             if (isPlaying) {
                 val h = settings.forceStopHours
                 if (h > 0 && forceStopJob?.isActive != true)
-                    forceStopJob = scope.launch { delay(h * 3_600_000L); exo.pause() }
-            } else saver.save(sidecar = !exo.playWhenReady)
+                    forceStopJob = scope.launch { delay(h * 3_600_000L); pl.pause() }
+            } else saver.save(sidecar = !pl.playWhenReady)
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -180,7 +189,7 @@ class PlaybackService : MediaLibraryService() {
         override fun onPositionDiscontinuity(old: Player.PositionInfo, new: Player.PositionInfo, reason: Int) {
             if (reason != Player.DISCONTINUITY_REASON_SEEK) return
             saver.save()
-            if (!exo.playWhenReady) pausedAt = null // the user chose a position while paused: don't rewind from it
+            if (!pl.playWhenReady) pausedAt = null // the user chose a position while paused: don't rewind from it
         }
 
         override fun onPlaybackStateChanged(state: Int) {
@@ -193,15 +202,18 @@ class PlaybackService : MediaLibraryService() {
             if (error.errorCode !in 2000..2999) return // PlaybackException IO errors
             if (System.currentTimeMillis() - lastReloadAt < 10_000) return
             lastReloadAt = System.currentTimeMillis()
-            val wasPlaying = exo.playWhenReady
+            val wasPlaying = pl.playWhenReady
             scope.launch {
                 val r = resolve(id) ?: return@launch
-                exo.setMediaItems(r.mediaItems, r.startIndex, r.startPositionMs); exo.prepare()
-                if (wasPlaying) exo.play()
+                pl.setMediaItems(r.mediaItems, r.startIndex, r.startPositionMs); pl.prepare()
+                if (wasPlaying) pl.play()
             }
         }
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) = boost.attach(audioSessionId)
+        override fun onDeviceInfoChanged(deviceInfo: androidx.media3.common.DeviceInfo) {
+            if (deviceInfo.playbackType == androidx.media3.common.DeviceInfo.PLAYBACK_TYPE_LOCAL) server.stop() // back from Cast
+        }
         override fun onPlaybackParametersChanged(p: PlaybackParameters) = updateButtons()
     }
 
@@ -259,7 +271,7 @@ class PlaybackService : MediaLibraryService() {
         if (loaded?.book?.id == bookId) return
         scope.launch {
             val lb = load(bookId)?.first ?: return@launch
-            if (exo.currentMediaItem?.mediaMetadata?.extras?.getString(ItemExtras.BOOK_ID) == bookId) adopt(lb, null)
+            if (pl.currentMediaItem?.mediaMetadata?.extras?.getString(ItemExtras.BOOK_ID) == bookId) adopt(lb, null)
         }
     }
 
@@ -273,15 +285,15 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private fun playBook(bookId: String, chapter: Int? = null, fromStart: Boolean = false, play: Boolean = true) {
-        if (chapter == null && !fromStart && loaded?.book?.id == bookId && exo.mediaItemCount > 0) {
-            if (play) { if (exo.playbackState == Player.STATE_IDLE) exo.prepare(); exo.play() }
+        if (chapter == null && !fromStart && loaded?.book?.id == bookId && pl.mediaItemCount > 0) {
+            if (play) { if (pl.playbackState == Player.STATE_IDLE) pl.prepare(); pl.play() }
             return
         }
         scope.launch {
             val r = resolve(bookId, chapter, fromStart) ?: return@launch
-            exo.setMediaItems(r.mediaItems, r.startIndex, r.startPositionMs)
-            exo.prepare()
-            if (play) exo.play()
+            pl.setMediaItems(r.mediaItems, r.startIndex, r.startPositionMs)
+            pl.prepare()
+            if (play) pl.play()
         }
     }
 
@@ -313,8 +325,8 @@ class PlaybackService : MediaLibraryService() {
         val bs = bookSettings?.takeIf { it.bookId == loaded?.book?.id }
         val speed = (bs?.speed ?: settings.defaultSpeed).coerceIn(0.5f, 3f)
         val pitch = (bs?.pitch ?: 1f).coerceIn(0.5f, 2f)
-        if (exo.playbackParameters.speed != speed || exo.playbackParameters.pitch != pitch)
-            exo.playbackParameters = PlaybackParameters(speed, pitch)
+        if (pl.playbackParameters.speed != speed || pl.playbackParameters.pitch != pitch)
+            pl.playbackParameters = PlaybackParameters(speed, pitch)
         exo.skipSilenceEnabled = bs?.skipSilence ?: settings.defaultSkipSilence
         boostMb = bs?.boostMb ?: 0
         boost.set(boostMb)
@@ -334,7 +346,7 @@ class PlaybackService : MediaLibraryService() {
     private fun setSpeed(speed: Float, asDefault: Boolean = false) {
         val v = (Math.round(speed * 20) / 20f).coerceIn(0.5f, 3f)
         if (asDefault) scope.launch { app.prefs.update { it.copy(defaultSpeed = v) } }
-        if (loaded == null) exo.playbackParameters = PlaybackParameters(v, exo.playbackParameters.pitch)
+        if (loaded == null) pl.playbackParameters = PlaybackParameters(v, pl.playbackParameters.pitch)
         else editBook { it.copy(speed = v) }
     }
 
@@ -352,12 +364,12 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private fun buttons(): List<CommandButton> =
-        mediaButtons(this, settings, exo.playbackParameters.speed, if (::sleep.isInitialized) sleep.state.value.mode else SleepMode.Off)
+        mediaButtons(this, settings, pl.playbackParameters.speed, if (::sleep.isInitialized) sleep.state.value.mode else SleepMode.Off)
 
     private fun updateButtons() {
         if (!::session.isInitialized) return
         val key = "${settings.prevAction}|${settings.nextAction}|${settings.rewindSmallSec}|${settings.fwdSmallSec}|" +
-            "${exo.playbackParameters.speed}|${sleep.state.value.mode}"
+            "${pl.playbackParameters.speed}|${sleep.state.value.mode}"
         if (key == buttonsKey) return
         buttonsKey = key
         session.setMediaButtonPreferences(buttons())
@@ -367,11 +379,11 @@ class PlaybackService : MediaLibraryService() {
 
     private fun seekBy(deltaMs: Long) {
         val lb = loaded
-        if (lb == null || lb.spans.size != exo.mediaItemCount) {
-            exo.seekTo((exo.currentPosition + deltaMs).coerceAtLeast(0)); return
+        if (lb == null || lb.spans.size != pl.mediaItemCount) {
+            pl.seekTo((pl.currentPosition + deltaMs).coerceAtLeast(0)); return
         }
-        val (i, off) = seekByMs(lb.spans, exo.currentMediaItemIndex, exo.currentPosition, deltaMs)
-        exo.seekTo(i, off)
+        val (i, off) = seekByMs(lb.spans, pl.currentMediaItemIndex, pl.currentPosition, deltaMs)
+        pl.seekTo(i, off)
     }
 
     /** Runs a §5.6 mapping (next/prev, headset presses). [history] overrides the event name for seconds skips. */
@@ -383,37 +395,37 @@ class PlaybackService : MediaLibraryService() {
 
     fun exec(cmd: Command, args: Bundle = Bundle.EMPTY) {
         // Cold start: the UI shows the last book before anything is loaded, so seeks/skips must load it (paused) first.
-        if (exo.mediaItemCount == 0 && cmd in needsLoadedBook) {
+        if (pl.mediaItemCount == 0 && cmd in needsLoadedBook) {
             scope.launch {
                 val r = dao.lastPlayed()?.let { resolve(it.id) } ?: return@launch
-                exo.setMediaItems(r.mediaItems, r.startIndex, r.startPositionMs); exo.prepare()
-                if (exo.mediaItemCount > 0) exec(cmd, args)
+                pl.setMediaItems(r.mediaItems, r.startIndex, r.startPositionMs); pl.prepare()
+                if (pl.mediaItemCount > 0) exec(cmd, args)
             }
             return
         }
         MappedAction(cmd, args.getLong(Command.EXTRA_MS)).skipMs(settings)?.let { skip ->
             saver.history(if (skip < 0) "BACK" else "FWD"); seekBy(skip); return
         }
-        val idx = exo.currentMediaItemIndex
+        val idx = pl.currentMediaItemIndex
         when (cmd) {
-            Command.PLAY_PAUSE -> if (exo.playWhenReady && exo.mediaItemCount > 0) exo.pause() else exec(Command.PLAY)
-            Command.PLAY -> if (exo.mediaItemCount == 0) resumeLast() else {
-                if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
-                if (exo.playbackState == Player.STATE_ENDED) exo.seekTo(0, 0)
-                exo.play()
+            Command.PLAY_PAUSE -> if (pl.playWhenReady && pl.mediaItemCount > 0) pl.pause() else exec(Command.PLAY)
+            Command.PLAY -> if (pl.mediaItemCount == 0) resumeLast() else {
+                if (pl.playbackState == Player.STATE_IDLE) pl.prepare()
+                if (pl.playbackState == Player.STATE_ENDED) pl.seekTo(0, 0)
+                pl.play()
             }
-            Command.PAUSE -> exo.pause()
+            Command.PAUSE -> pl.pause()
             Command.PREV_CHAPTER -> {
                 saver.history("PREV")
-                exo.seekTo(if (exo.currentPosition > 3_000 || idx == 0) idx else idx - 1, 0)
+                pl.seekTo(if (pl.currentPosition > 3_000 || idx == 0) idx else idx - 1, 0)
             }
-            Command.NEXT_CHAPTER -> if (idx < exo.mediaItemCount - 1) { saver.history("NEXT"); exo.seekTo(idx + 1, 0) }
+            Command.NEXT_CHAPTER -> if (idx < pl.mediaItemCount - 1) { saver.history("NEXT"); pl.seekTo(idx + 1, 0) }
             Command.PREV_FILE, Command.NEXT_FILE -> loaded?.spans?.let { spans ->
                 val track = spans.getOrNull(idx)?.trackIndex ?: return
                 val first = spans.indexOfFirst { it.trackIndex == track }
-                val target = if (cmd == Command.PREV_FILE && (idx != first || exo.currentPosition > 3_000)) first
+                val target = if (cmd == Command.PREV_FILE && (idx != first || pl.currentPosition > 3_000)) first
                 else spans.indexOfFirst { it.trackIndex == track + if (cmd == Command.PREV_FILE) -1 else 1 }
-                if (target >= 0) { saver.history(if (cmd == Command.PREV_FILE) "PREV" else "NEXT"); exo.seekTo(target, 0) }
+                if (target >= 0) { saver.history(if (cmd == Command.PREV_FILE) "PREV" else "NEXT"); pl.seekTo(target, 0) }
             }
             Command.PREV_BOOK, Command.NEXT_BOOK -> scope.launch {
                 neighbourBook(if (cmd == Command.PREV_BOOK) -1 else 1)?.let { playBook(it.id, play = true) }
@@ -421,12 +433,12 @@ class PlaybackService : MediaLibraryService() {
             Command.ADD_BOOKMARK -> addBookmark(args)
             Command.NEXT_BOOKMARK -> nextBookmark()
             Command.TOGGLE_SPEED -> {
-                val cur = exo.playbackParameters.speed
+                val cur = pl.playbackParameters.speed
                 if (cur != 1f) editBook { it.copy(speed = 1f, savedToggleSpeed = cur) }
                 else editBook { it.copy(speed = it.savedToggleSpeed ?: settings.defaultSpeed.takeIf { s -> s != 1f } ?: 1.5f) }
             }
             Command.SET_SPEED -> setSpeed(args.getFloat(Command.EXTRA_SPEED, 1f), args.getBoolean(Command.EXTRA_AS_DEFAULT))
-            Command.CYCLE_SPEED -> setSpeed(nextCycleSpeed(exo.playbackParameters.speed))
+            Command.CYCLE_SPEED -> setSpeed(nextCycleSpeed(pl.playbackParameters.speed))
             Command.SLEEP_ON -> {
                 val explicit = args.containsKey(Command.EXTRA_MINUTES)
                 val m = if (explicit) args.getInt(Command.EXTRA_MINUTES) else settings.sleepMinutes
@@ -436,21 +448,21 @@ class PlaybackService : MediaLibraryService() {
             Command.SLEEP_OFF -> sleep.set(SleepMode.Off)
             Command.SLEEP_EXTEND -> if (sleep.state.value.mode == SleepMode.Off) exec(Command.SLEEP_ON) else sleep.reset()
             Command.SLEEP_CYCLE -> sleep.set(nextSleepCycle(sleep.state.value.mode))
-            Command.EXIT -> { saver.save(sidecar = true); exo.pause(); sleep.set(SleepMode.Off); pauseAllPlayersAndStopSelf() }
+            Command.EXIT -> { saver.save(sidecar = true); pl.pause(); sleep.set(SleepMode.Off); pauseAllPlayersAndStopSelf() }
             Command.PLAY_BOOK -> args.getString(Command.EXTRA_BOOK_ID)?.let {
                 playBook(it, args.getInt(Command.EXTRA_CHAPTER, -1).takeIf { c -> c >= 0 }, args.getBoolean(Command.EXTRA_FROM_START))
             }
             Command.PLAY_SEARCH -> scope.launch { resolveQuery(args.getString(Command.EXTRA_QUERY).orEmpty())?.let { playBook(it.id) } }
             Command.SEEK_IN_BOOK -> loaded?.let {
                 saver.history("SEEK")
-                val (i, o) = locate(it.spans, args.getLong(Command.EXTRA_MS)); exo.seekTo(i, o)
+                val (i, o) = locate(it.spans, args.getLong(Command.EXTRA_MS)); pl.seekTo(i, o)
             }
             Command.JUMP_TO -> loaded?.let {
                 saver.history("SEEK")
-                val (i, o) = locateInTrack(it.spans, args.getInt(Command.EXTRA_TRACK), args.getLong(Command.EXTRA_MS)); exo.seekTo(i, o)
+                val (i, o) = locateInTrack(it.spans, args.getInt(Command.EXTRA_TRACK), args.getLong(Command.EXTRA_MS)); pl.seekTo(i, o)
             }
-            Command.SET_CHAPTER -> if (exo.mediaItemCount > 0) {
-                saver.history("SEEK"); exo.seekTo(args.getInt(Command.EXTRA_CHAPTER).coerceIn(0, exo.mediaItemCount - 1), 0)
+            Command.SET_CHAPTER -> if (pl.mediaItemCount > 0) {
+                saver.history("SEEK"); pl.seekTo(args.getInt(Command.EXTRA_CHAPTER).coerceIn(0, pl.mediaItemCount - 1), 0)
             }
             Command.SET_SKIP_SILENCE -> editBook { it.copy(skipSilence = args.getBoolean(Command.EXTRA_ENABLED)) }
             Command.SET_BOOST -> editBook { it.copy(boostMb = args.getInt(Command.EXTRA_MB).coerceIn(0, 1500)) }
@@ -468,8 +480,8 @@ class PlaybackService : MediaLibraryService() {
 
     private fun addBookmark(args: Bundle) {
         val snap = saver.snapshot() ?: return
-        val ch = loaded?.chapters?.getOrNull(exo.currentMediaItemIndex)
-        val title = args.getString(Command.EXTRA_TITLE) ?: "${ch?.title ?: snap.book.title} · ${formatClock(exo.currentPosition)}"
+        val ch = loaded?.chapters?.getOrNull(pl.currentMediaItemIndex)
+        val title = args.getString(Command.EXTRA_TITLE) ?: "${ch?.title ?: snap.book.title} · ${formatClock(pl.currentPosition)}"
         val b = Bookmark(bookId = snap.book.id, trackIndex = snap.trackIndex, positionMs = snap.positionInTrackMs,
             title = title, note = args.getString(Command.EXTRA_NOTE), createdAt = System.currentTimeMillis())
         scope.launch {

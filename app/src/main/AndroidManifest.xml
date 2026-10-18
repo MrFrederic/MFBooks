@@ -5,8 +5,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <!-- Android 16 Live Update chip for the conversion progress notification -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Chromecast (playback/Cast.kt): the owner asked for casting, so network access is allowed for it only:
+         Cast discovery/control and the local HTTP server that streams the book to the receiver over Wi-Fi. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:name=".MFBooksApp"
@@ -52,11 +59,15 @@
             android:authorities="app.mfbooks.covers"
             android:exported="true" />
 
-        <!-- Opus conversion (convert/ConvertWorker) runs as a WorkManager foreground worker -->
+        <!-- Opus conversion (convert/ConvertWorker) runs as a WorkManager foreground worker: mediaProcessing on API 35+, dataSync below -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="dataSync|mediaProcessing"
             tools:node="merge" />
+
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="app.mfbooks.playback.CastOptionsProvider" />
 
         <meta-data
             android:name="com.google.android.gms.car.application"

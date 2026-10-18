@@ -21,6 +21,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
+import java.io.File
 import org.json.JSONObject
 import kotlin.math.abs
 
@@ -99,12 +100,15 @@ class FileConverter(private val context: Context) {
             return FileResult.Failed("can't write ${Sidecar.NAME} (read-only folder?)")
         }
 
-        // 3–5. Transcode into the temp file.
+        // 3–5. Transcode into the temp file. Finished chunks live in a cache dir keyed by the source, so a stopped run
+        // (pause, system stop) resumes mid-file; leftovers of other files are dropped.
+        val work = File(File(context.cacheDir, "opus"), "%08x".format("${src.uri}|${src.size}|${src.mtime}".hashCode()))
+        work.parentFile?.listFiles()?.filter { it != work }?.forEach { it.deleteRecursively() }
         val tmp = DocumentsContract.createDocument(r, f.uri, "application/octet-stream", tmpName)
             ?: return FileResult.Failed("can't create $tmpName")
         try {
             r.openFileDescriptor(tmp, "rw")!!.use { out ->
-                r.openFileDescriptor(src.uri, "r")!!.use { inp -> OpusTranscoder.transcode(inp.fileDescriptor, out.fileDescriptor, comments, progress, cancelled) }
+                r.openFileDescriptor(src.uri, "r")!!.use { inp -> OpusTranscoder.transcode(inp.fileDescriptor, out.fileDescriptor, comments, progress, cancelled, work) }
             }
         } catch (e: Throwable) {
             runCatching { DocumentsContract.deleteDocument(r, tmp) }
@@ -112,6 +116,7 @@ class FileConverter(private val context: Context) {
             Log.w(TAG, "transcode failed: ${src.name}", e)
             return FileResult.Failed("encoding failed: ${e.message ?: e.javaClass.simpleName}")
         }
+        work.deleteRecursively()
 
         // 6. Verify.
         val outMs = r.openFileDescriptor(tmp, "r")?.use { OpusTranscoder.durationMs(it.fileDescriptor) } ?: -1

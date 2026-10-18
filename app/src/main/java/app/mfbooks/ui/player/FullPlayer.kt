@@ -335,6 +335,7 @@ private fun ToolRow(
             content = if (locked) cs.error else null) {
             Icon(if (locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen, null, Modifier.size(22.dp))
         }
+        CastButton(m)
         Box(m) {
             HoldIconButton({ menu = true }, {}, "More options", h, RoundedCornerShape(16.dp), none, Modifier.fillMaxWidth().height(h), enabled = !locked) {
                 Icon(Icons.Rounded.MoreVert, null)

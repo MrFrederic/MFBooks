@@ -50,7 +50,8 @@ class Resampler(private val inRate: Int, private val outRate: Int, private val c
     fun process(src: ShortArray, frames: Int): ShortArray {
         if (passthrough) return src.copyOf(frames * channels)
         ensure(bufFrames + frames)
-        for (i in 0 until frames * channels) buf[bufFrames * channels + i] = src[i].toFloat()
+        val b = buf; val o = bufFrames * channels
+        for (i in 0 until frames * channels) b[o + i] = src[i].toFloat()
         bufFrames += frames
         inTotal += frames
         return produce(Long.MAX_VALUE)
@@ -67,21 +68,36 @@ class Resampler(private val inRate: Int, private val outRate: Int, private val c
     }
 
     private fun produce(limit: Long): ShortArray {
-        val out = ShortArrayBuilder()
-        while (outIndex < limit) {
+        // Every output frame whose kernel fits in the buffered input, up to [limit]: count first, then fill one array.
+        val end = bufStart + bufFrames                      // first input frame we don't have
+        // output m is computable iff floor(m*step/den) + half <= end - 1  ⇔  m*step < (end - half) * den
+        val avail = if (end - half < 0) 0L else ((end - half) * den + step - 1) / step
+        val n = (minOf(avail, limit) - outIndex).coerceAtLeast(0).toInt()
+        val out = ShortArray(n * channels)
+        var o = 0
+        val buf = buf; val taps = taps
+        repeat(n) {
             val num = outIndex * step                       // input position = num / den
-            val base = num / den
-            val first = base - half + 1                     // first input frame the kernel touches
-            val last = first + taps - 1
-            if (last >= bufStart + bufFrames) break         // need more input
-            val p = ((num % den) * phases / den).toInt()
-            val k = kernel[p]
-            val off = (first - bufStart).toInt()
-            for (c in 0 until channels) {
-                var acc = 0f
-                var idx = off * channels + c
-                for (t in 0 until taps) { acc += k[t] * buf[idx]; idx += channels }
-                out.add(acc.coerceIn(-32768f, 32767f).toInt().toShort())
+            val first = num / den - half + 1                // first input frame the kernel touches
+            val k = kernel[((num % den) * phases / den).toInt()]
+            var idx = (first - bufStart).toInt() * channels
+            when (channels) {
+                1 -> {
+                    var acc = 0f
+                    for (t in 0 until taps) acc += k[t] * buf[idx + t]
+                    out[o++] = clip(acc)
+                }
+                2 -> {
+                    var l = 0f; var r = 0f
+                    for (t in 0 until taps) { val w = k[t]; l += w * buf[idx]; r += w * buf[idx + 1]; idx += 2 }
+                    out[o++] = clip(l); out[o++] = clip(r)
+                }
+                else -> for (c in 0 until channels) {
+                    var acc = 0f
+                    var i = idx + c
+                    for (t in 0 until taps) { acc += k[t] * buf[i]; i += channels }
+                    out[o++] = clip(acc)
+                }
             }
             outIndex++
         }
@@ -92,17 +108,13 @@ class Resampler(private val inRate: Int, private val outRate: Int, private val c
             System.arraycopy(buf, drop * channels, buf, 0, (bufFrames - drop) * channels)
             bufFrames -= drop; bufStart += drop
         }
-        return out.toArray()
+        return out
     }
+
+    private fun clip(v: Float): Short = (if (v > 32767f) 32767f else if (v < -32768f) -32768f else v).toInt().toShort()
 
     private fun ensure(frames: Int) {
         if (frames * channels > buf.size) buf = buf.copyOf(maxOf(frames * channels, buf.size * 2))
-    }
-
-    private class ShortArrayBuilder {
-        private var a = ShortArray(1024); private var n = 0
-        fun add(s: Short) { if (n == a.size) a = a.copyOf(n * 2); a[n++] = s }
-        fun toArray() = a.copyOf(n)
     }
 
     companion object {

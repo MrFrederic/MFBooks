@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -33,7 +35,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -103,11 +104,14 @@ fun ConvertScreen(onBack: () -> Unit) {
     val saved by store.savedBytes.collectAsStateWithLifecycle(0L)
     val convertedFiles by store.convertedFiles.collectAsStateWithLifecycle(0L)
     val storedThreshold by store.batteryThreshold.collectAsStateWithLifecycle(80)
+    val queue by store.queue.collectAsStateWithLifecycle(emptySet())
     val work by remember { WorkManager.getInstance(ctx).getWorkInfosForUniqueWorkFlow(ConvertWorker.NAME) }
         .collectAsStateWithLifecycle(emptyList())
     val info = work.lastOrNull { !it.state.isFinished } ?: work.lastOrNull()
     val active = info != null && !info.state.isFinished
-    val running = info?.state == WorkInfo.State.RUNNING
+    val paused = !active && queue.isNotEmpty() // stopped with files left: Resume continues mid-file
+    val pause = { ConvertWorker.cancel(ctx); Unit }
+    val discard = { scope.launch { ConvertWorker.discard(ctx.applicationContext) }; Unit }
 
     // Eligible files per root/book, recomputed whenever a run ends (converted files drop out).
     var plans by remember { mutableStateOf<List<RootPlan>?>(null) }
@@ -143,6 +147,8 @@ fun ConvertScreen(onBack: () -> Unit) {
                 scrollBehavior = scroll,
             )
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalChromePadding.current + 24.dp)) {
+                // While a run is active the page is only its progress; the options come back when it ends or pauses.
+                if (active) { item("job") { JobPanel(info!!, onPause = pause, onCancel = discard) }; return@LazyColumn }
                 item("saved") {
                     Panel(Modifier.fillMaxWidth().padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.primaryContainer) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -173,7 +179,19 @@ fun ConvertScreen(onBack: () -> Unit) {
                     }
                 }
 
-                if (info != null) item("job") { JobPanel(info, onCancel = { ConvertWorker.cancel(ctx) }) }
+                if (paused) item("paused") {
+                    Panel(Modifier.fillMaxWidth().padding(16.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                        val onC = MaterialTheme.colorScheme.onSecondaryContainer
+                        Text("Paused", style = MaterialTheme.typography.titleLarge, color = onC)
+                        Text("${queue.size} book${if (queue.size == 1) "" else "s"} left. Resume continues where it stopped, mid-file.",
+                            style = MaterialTheme.typography.bodyMedium, color = onC)
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button({ ConvertWorker.enqueue(ctx) }, enabled = settings.saveInBookFolders, shapes = ButtonDefaults.shapes()) { Text("Resume") }
+                            OutlinedButton(discard) { Text("Cancel conversion") }
+                        }
+                    }
+                } else if (info != null) item("job") { JobPanel(info, onPause = pause, onCancel = discard) }
 
                 item("pick") { SectionHeader("What to convert") }
                 val ps = plans
@@ -254,8 +272,7 @@ fun ConvertScreen(onBack: () -> Unit) {
 
                 item("start") {
                     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (active) OutlinedButton({ ConvertWorker.cancel(ctx) }, Modifier.fillMaxWidth().height(56.dp)) { Text("Cancel conversion") }
-                        else Button(
+                        Button(
                             onClick = {
                                 scope.launch {
                                     store.setQueue(chosen.map { it.book.id }.toSet())
@@ -276,7 +293,7 @@ fun ConvertScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun JobPanel(info: WorkInfo, onCancel: () -> Unit) {
+private fun JobPanel(info: WorkInfo, onPause: () -> Unit, onCancel: () -> Unit) {
     val p = if (info.state.isFinished) info.outputData else info.progress
     val done = p.getInt(ConvertWorker.P_DONE, 0)
     val total = p.getInt(ConvertWorker.P_TOTAL, 0)
@@ -287,21 +304,25 @@ private fun JobPanel(info: WorkInfo, onCancel: () -> Unit) {
         val onC = MaterialTheme.colorScheme.onSecondaryContainer
         when (info.state) {
             WorkInfo.State.RUNNING -> {
+                val overall = if (total > 0) ((done + file) / total).coerceIn(0f, 1f) else 0f
                 Text(if (total > 0) "Converting ${minOf(done + 1, total)} of $total" else "Preparing…", style = MaterialTheme.typography.titleLarge, color = onC)
-                current?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = onC, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                Text("${(overall * 100).toInt()} % overall · saved ${formatBytes(p.getLong(ConvertWorker.P_SAVED, 0))}", style = MaterialTheme.typography.bodyMedium, color = onC)
                 Spacer(Modifier.height(12.dp))
-                LinearWavyProgressIndicator({ if (total > 0) ((done + file) / total).coerceIn(0f, 1f) else 0f }, Modifier.fillMaxWidth())
+                LinearWavyProgressIndicator({ overall }, Modifier.fillMaxWidth())
+                Spacer(Modifier.height(16.dp))
+                current?.let { Text(it, style = MaterialTheme.typography.titleSmall, color = onC, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                Text("${(file * 100).toInt()} % of this file", style = MaterialTheme.typography.bodySmall, color = onC)
                 Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator({ file }, Modifier.fillMaxWidth())
                 if (failed > 0) Text("$failed failed so far", Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.height(12.dp))
-                FilledTonalButton(onCancel) { Text("Cancel") }
+                Spacer(Modifier.height(16.dp))
+                PauseCancel(onPause, onCancel)
             }
             WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
                 Text("Waiting to run", style = MaterialTheme.typography.titleLarge, color = onC)
                 Text("Starts when charging (or above the battery threshold) with enough free storage.", style = MaterialTheme.typography.bodyMedium, color = onC)
                 Spacer(Modifier.height(12.dp))
-                FilledTonalButton(onCancel) { Text("Cancel") }
+                PauseCancel(onPause, onCancel)
             }
             WorkInfo.State.SUCCEEDED, WorkInfo.State.FAILED -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.Restore, null, tint = onC)
@@ -309,7 +330,19 @@ private fun JobPanel(info: WorkInfo, onCancel: () -> Unit) {
                 Text("Last run: " + (info.outputData.getString(ConvertWorker.OUT_MESSAGE) ?: info.state.name.lowercase()),
                     style = MaterialTheme.typography.bodyLarge, color = onC)
             }
-            WorkInfo.State.CANCELLED -> Text("Last run was cancelled. Run again to continue where it stopped.", style = MaterialTheme.typography.bodyLarge, color = onC)
+            WorkInfo.State.CANCELLED -> Text("Last run was cancelled.", style = MaterialTheme.typography.bodyLarge, color = onC)
+        }
+    }
+}
+
+@Composable
+private fun PauseCancel(onPause: () -> Unit, onCancel: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onPause, shapes = ButtonDefaults.shapes()) { // tonal would vanish on the secondaryContainer panel
+            Icon(Icons.Rounded.Pause, null, Modifier.size(ButtonDefaults.IconSize)); Spacer(Modifier.width(ButtonDefaults.IconSpacing)); Text("Pause")
+        }
+        OutlinedButton(onCancel, shapes = ButtonDefaults.shapes()) {
+            Icon(Icons.Rounded.Close, null, Modifier.size(ButtonDefaults.IconSize)); Spacer(Modifier.width(ButtonDefaults.IconSpacing)); Text("Cancel")
         }
     }
 }
