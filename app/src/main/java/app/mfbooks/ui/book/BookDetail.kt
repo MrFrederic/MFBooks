@@ -61,6 +61,7 @@ import app.mfbooks.data.Book
 import app.mfbooks.data.BookState
 import app.mfbooks.data.Chapter
 import app.mfbooks.ui.components.BookCover
+import app.mfbooks.ui.components.CoverBackdrop
 import app.mfbooks.ui.components.LocalChromePadding
 import app.mfbooks.ui.components.Panel
 import app.mfbooks.ui.components.PlayingBars
@@ -94,17 +95,9 @@ fun BookDetailScreen(bookId: String, onBack: () -> Unit) {
     val currentIdx = if (loaded) now.chapterIndex
     else item?.let { i -> chapters.indexOfLast { it.startInBookMs <= i.positionMs }.takeIf { i.positionMs > 0 } } ?: -1
     val resume = b != null && (b.state == BookState.STARTED || loaded)
-    val glow = LocalGlow.current
-    val tint = b?.seedColor?.let { comfortable(Color(it), glow.dark) } ?: glow.color
-
     Box(Modifier.fillMaxSize().nestedScroll(scroll.nestedScrollConnection)) {
         if (item == null || b == null) return@Box
-        // Blurred, tinted cover backdrop behind the header. ponytail: blur is a no-op below API 31; the tint carries it.
-        Box(Modifier.fillMaxWidth().height(520.dp)) {
-            if (b.coverUri != null) AsyncImage(b.coverUri, null, Modifier.fillMaxSize().blur(60.dp).alpha(if (glow.dark) 0.45f else 0.35f), contentScale = ContentScale.Crop)
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-                0f to tint.copy(alpha = 0.45f), 0.6f to tint.copy(alpha = 0.15f), 1f to MaterialTheme.colorScheme.background)))
-        }
+        CoverBackdrop(b.coverUri, b.seedColor, Modifier.fillMaxWidth().height(520.dp))
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalChromePadding.current + 16.dp)) {
             item {
                 Column(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 64.dp, start = 24.dp, end = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {

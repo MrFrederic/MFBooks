@@ -42,8 +42,6 @@ import androidx.compose.ui.unit.dp
 /** Height of the floating chrome (mini player + toolbar + nav bar inset) that scrolling content must clear. */
 val LocalChromePadding = compositionLocalOf { 0.dp }
 
-/** Set by full-screen overlays (library search) to hide the floating chrome. ponytail: a global flag, not a nav-aware API. */
-val chromeHidden = androidx.compose.runtime.mutableStateOf(false)
 
 /** Section title in the primary colour, like "Keep listening". */
 @Composable

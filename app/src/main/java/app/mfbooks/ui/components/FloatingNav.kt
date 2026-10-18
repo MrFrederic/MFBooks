@@ -2,26 +2,20 @@
 
 package app.mfbooks.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Search
@@ -32,62 +26,67 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 
 data class NavEntry(val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
 
+private val Narrow = 48.dp
+
 /**
  * Floating pill navigation: an Expressive [HorizontalFloatingToolbar] whose selected tab is marked by a pill that
- * slides and stretches between items (icon + label for the selected one, icon only for the rest), plus a search FAB.
+ * slides between items (icon + label for the selected one, icon only for the rest), plus a search FAB.
+ * Every selected item is as wide as the widest label needs, and the items' widths animate in lockstep, so the toolbar's
+ * total width never changes and it stays put (centred) while tabs switch.
  */
 @Composable
 fun FloatingNav(entries: List<NavEntry>, selected: Int, onSelect: (Int) -> Unit, onSearch: () -> Unit, modifier: Modifier = Modifier) {
-    val density = LocalDensity.current
-    val bounds = remember { mutableStateMapOf<Int, Pair<Dp, Dp>>() }
-    val target = bounds[selected]
-    val springy = spring<Dp>(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow)
-    val x by animateDpAsState(target?.first ?: 0.dp, springy, label = "pillX")
-    val w by animateDpAsState(target?.second ?: 0.dp, springy, label = "pillW")
+    val style = MaterialTheme.typography.labelLarge
+    val measurer = rememberTextMeasurer()
+    val labelW = with(LocalDensity.current) { entries.maxOf { measurer.measure(it.label, style, maxLines = 1).size.width }.toDp() }
+    val wide = 16.dp + 24.dp + 8.dp + labelW + 16.dp
+    val pillX by animateDpAsState(Narrow * selected, spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow), label = "pillX")
     HorizontalFloatingToolbar(
         expanded = true,
         floatingActionButton = {
             FloatingToolbarDefaults.VibrantFloatingActionButton(onClick = onSearch) { Icon(Icons.Rounded.Search, "Search") }
         },
-        modifier = modifier.widthIn(max = 480.dp),
+        modifier = modifier,
         colors = FloatingToolbarDefaults.standardFloatingToolbarColors(),
     ) {
-        Box(Modifier.height(IntrinsicSize.Min)) {
-            if (target != null) Box(Modifier.offset(x = x).width(w).fillMaxHeight().background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(50)))
+        Box(Modifier.height(Narrow)) {
+            Box(Modifier.offset(x = pillX).width(wide).height(Narrow).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(50)))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 entries.forEachIndexed { i, e ->
                     val on = i == selected
+                    // No bounce here: overshooting widths would make the toolbar breathe.
+                    val f by animateFloatAsState(if (on) 1f else 0f, spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow), label = "tab$i")
                     val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant, label = "tint")
-                    Row(
+                    Box(
                         Modifier
-                            .onPlaced { c -> with(density) { bounds[i] = c.positionInParent().x.toDp() to c.size.width.toDp() } }
+                            .width(lerp(Narrow, wide, f)).height(Narrow)
                             .clip(RoundedCornerShape(50))
                             .clickable(role = Role.Tab) { onSelect(i) }
-                            .semantics { this.selected = on }
-                            .widthIn(min = 48.dp)
-                            .padding(horizontal = if (on) 16.dp else 12.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .semantics { this.selected = on; contentDescription = e.label }
+                            .clipToBounds(),
+                        contentAlignment = Alignment.CenterStart,
                     ) {
-                        Icon(if (on) e.selectedIcon else e.icon, e.label, tint = tint)
-                        AnimatedVisibility(on, enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
-                            Text(e.label, Modifier.padding(start = 8.dp), color = tint, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                        Row(Modifier.wrapContentWidth(Alignment.Start, unbounded = true).padding(start = lerp(12.dp, 16.dp, f)), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(if (on) e.selectedIcon else e.icon, null, tint = tint)
+                            Text(e.label, Modifier.padding(start = 8.dp).graphicsLayer { alpha = f }.clearAndSetSemantics { }, color = tint, style = style, maxLines = 1)
                         }
                     }
                 }

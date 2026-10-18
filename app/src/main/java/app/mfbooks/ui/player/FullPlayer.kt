@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -74,6 +75,9 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SliderState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.contentColorFor
+import androidx.compose.ui.graphics.takeOrElse
+import app.mfbooks.ui.components.CoverBackdrop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -128,22 +132,13 @@ private enum class Sheet { Speed, Sleep, Eq, Boost, Bookmark, Lists }
 
 internal val tnum = TextStyle(fontFeatureSettings = "tnum")
 
-/** Background stops from the cover tint: lit at the top, sinking to near-black (dark) or the surface (light). */
-@Composable
-private fun playerBrush(): Brush {
-    val g = LocalGlow.current
-    val bg = MaterialTheme.colorScheme.background
-    return if (g.dark) Brush.verticalGradient(0f to lerp(g.color, Color.Black, 0.25f), 0.45f to lerp(g.color, Color.Black, 0.6f), 1f to lerp(bg, Color.Black, 0.4f))
-    else Brush.verticalGradient(0f to lerp(bg, g.color, 0.55f), 0.55f to lerp(bg, g.color, 0.2f), 1f to bg)
-}
-
 /**
  * Layout, top to bottom: compact tool row · book title + whole-book progress · big cover (tap = play/pause) ·
  * file / chapter pickers · chapter slider · transport. With [Settings.lockControls] everything except play/pause,
  * the chapter picker and the unlock toggle is hidden or disabled.
  */
 @Composable
-fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, modifier: Modifier = Modifier) {
+fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
     val app = MFBooksApp.get(LocalContext.current)
     val player = app.player
     val scope = rememberCoroutineScope()
@@ -160,7 +155,9 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, modifier: M
     fun openLists(tab: ListTab) { listTab = tab; sheet = Sheet.Lists }
     LaunchedEffect(toast) { if (toast != null) { delay(2400); toast = null } }
 
-    Box(modifier.fillMaxSize().background(cs.background).background(playerBrush())) {
+    Box(modifier.fillMaxSize().background(cs.background)) {
+        // Same blurred-cover haze as the book page, stretched over the whole player.
+        CoverBackdrop(book.coverUri, book.seedColor, Modifier.fillMaxSize())
         Column(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -182,7 +179,7 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, modifier: M
                 onLock = { scope.launch { app.prefs.update { it.copy(lockControls = !locked) } } },
                 onSkipSilence = { player.setSkipSilence(!np.skipSilence) },
                 onHistory = { openLists(ListTab.History) }, onChapters = { openLists(ListTab.Chapters) },
-                onAddWithNote = { sheet = Sheet.Bookmark }, onDetails = { onOpenBook(book.id) })
+                onAddWithNote = { sheet = Sheet.Bookmark }, onDetails = { onOpenBook(book.id) }, onSettings = onSettings)
 
             // Whole-book block: title, thin progress bar, "Read x of y · n% · Left z".
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -195,14 +192,6 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, modifier: M
                 )
                 Text(bookProgressText(np, settings.progressFormat, tracks.size), Modifier.padding(top = 6.dp).semantics { contentDescription = "Book progress" },
                     style = MaterialTheme.typography.bodyMedium.merge(tnum), color = cs.onSurface.copy(alpha = 0.85f), maxLines = 1, textAlign = TextAlign.Center)
-                AnimatedVisibility(locked, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
-                    Surface(Modifier.padding(top = 8.dp), shape = CircleShape, color = cs.errorContainer, contentColor = cs.onErrorContainer) {
-                        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.Lock, null, Modifier.size(14.dp))
-                            Text("Controls locked", Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                }
             }
 
             // Cover fills whatever height is left. Tap = play/pause; swipe left/right = chapter, down = collapse.
@@ -303,13 +292,15 @@ private fun ToolRow(
     onSleep: () -> Unit, onSleepLong: () -> Unit, onBoost: () -> Unit, onEq: () -> Unit, onSpeed: () -> Unit, onSpeedLong: () -> Unit,
     onBookmarks: () -> Unit, onBookmarkAdd: () -> Unit, onLock: () -> Unit,
     onSkipSilence: () -> Unit, onHistory: () -> Unit, onChapters: () -> Unit, onAddWithNote: () -> Unit, onDetails: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     var menu by remember { mutableStateOf(false) }
     val sleep = np.sleep
     val sleepOn = sleep.mode != SleepMode.Off
     val none = Color.Transparent
-    val active = cs.primaryContainer
+    // Active toggles are filled primary; HoldIconButton picks the matching on-colour for the icon.
+    val active = cs.primary
     val h = 44.dp
     Row(
         Modifier.fillMaxWidth().padding(top = 4.dp)
@@ -357,6 +348,7 @@ private fun ToolRow(
                 item("Skip silence", Icons.Rounded.GraphicEq, trailing = np.skipSilence, onClick = onSkipSilence)
                 item("History", Icons.Rounded.History, onClick = onHistory)
                 item("Book details", Icons.AutoMirrored.Rounded.MenuBook, onClick = onDetails)
+                item("Settings", Icons.Rounded.Settings, onClick = onSettings)
             }
         }
     }
@@ -502,7 +494,8 @@ internal fun HoldIconButton(
             }
         }
     }
-    val fg = content ?: MaterialTheme.colorScheme.onSurface
+    // Icon colour follows the container (onPrimary on primary, …); plain onSurface on transparent or translucent ones.
+    val fg = content ?: MaterialTheme.colorScheme.contentColorFor(container).takeOrElse { MaterialTheme.colorScheme.onSurface }
     FilledTonalIconButton(
         onClick = { if (longFired) longFired = false else onClick() },
         modifier = modifier.semantics {

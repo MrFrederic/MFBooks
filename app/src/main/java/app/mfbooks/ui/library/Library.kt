@@ -61,6 +61,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -75,7 +78,6 @@ import app.mfbooks.ui.components.GroupRow
 import app.mfbooks.ui.components.LocalChromePadding
 import app.mfbooks.ui.components.SettingsGroup
 import app.mfbooks.ui.components.app
-import app.mfbooks.ui.components.chromeHidden
 import app.mfbooks.ui.components.rememberBookItems
 import app.mfbooks.ui.theme.glowBackdrop
 import kotlinx.coroutines.launch
@@ -95,7 +97,7 @@ private fun sorted(l: List<BookItem>, key: String): List<BookItem> = when (key) 
 }
 
 @Composable
-fun LibraryScreen(startSearch: Boolean, onOpenBook: (String) -> Unit, onSettings: () -> Unit) {
+fun LibraryScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit) {
     val ctx = LocalContext.current
     val app = app(ctx)
     val scope = rememberCoroutineScope()
@@ -104,12 +106,7 @@ fun LibraryScreen(startSearch: Boolean, onOpenBook: (String) -> Unit, onSettings
     val scan by app.scanner.progress.collectAsStateWithLifecycle()
     val now by app.player.state.collectAsStateWithLifecycle()
     var filter by rememberSaveable { mutableStateOf(Filter.ALL) }
-    var query by rememberSaveable { mutableStateOf("") }
-    var searching by rememberSaveable { mutableStateOf(startSearch) }
-    androidx.compose.runtime.LaunchedEffect(startSearch) { if (startSearch) searching = true }
-    androidx.compose.runtime.DisposableEffect(searching) { chromeHidden.value = searching; onDispose { chromeHidden.value = false } }
     var sheet by remember { mutableStateOf<Book?>(null) }
-    var menu by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var folderPath by rememberSaveable { mutableStateOf(listOf<String>()) }
 
@@ -120,12 +117,12 @@ fun LibraryScreen(startSearch: Boolean, onOpenBook: (String) -> Unit, onSettings
             else -> !it.book.hidden && (filter == Filter.ALL || it.book.state.name == filter.name)
         }
     }, settings.librarySort)
-    val results = if (query.isBlank()) emptyList() else all.filter { !it.book.hidden && listOfNotNull(it.book.title, it.book.author, it.book.narrator)
-        .any { s -> s.contains(query, ignoreCase = true) } }
     val view = settings.libraryView
     fun setPrefs(f: (Settings) -> Settings) { scope.launch { app.prefs.update(f) } }
 
-    BackHandler(view == "FOLDERS" && folderPath.isNotEmpty() && !searching) { folderPath = folderPath.dropLast(1) }
+    // Back first clears a filter, then climbs out of folders, then leaves the tab.
+    BackHandler(filter != Filter.ALL) { filter = Filter.ALL; folderPath = emptyList() }
+    BackHandler(filter == Filter.ALL && view == "FOLDERS" && folderPath.isNotEmpty()) { folderPath = folderPath.dropLast(1) }
 
     val pullState = rememberPullToRefreshState()
     val bottom = LocalChromePadding.current + 16.dp
@@ -135,7 +132,6 @@ fun LibraryScreen(startSearch: Boolean, onOpenBook: (String) -> Unit, onSettings
             TopAppBar(
                 title = { Text("Library", style = MaterialTheme.typography.headlineSmallEmphasized) },
                 actions = {
-                    IconButton({ searching = true }) { Icon(Icons.Rounded.Search, "Search") }
                     Box {
                         IconButton({ sortMenu = true }) { Icon(Icons.AutoMirrored.Rounded.Sort, "Sort") }
                         DropdownMenu(sortMenu, { sortMenu = false }, shape = RoundedCornerShape(20.dp)) {
@@ -153,22 +149,14 @@ fun LibraryScreen(startSearch: Boolean, onOpenBook: (String) -> Unit, onSettings
                         Icon(when (view) { "GRID" -> Icons.Rounded.GridView; "LIST" -> Icons.AutoMirrored.Rounded.ViewList; else -> Icons.Rounded.FolderOpen },
                             "View: ${view.lowercase()}. Switch to ${next.lowercase()}")
                     }
-                    Box {
-                        IconButton({ menu = true }) { Icon(Icons.Rounded.MoreVert, "More options") }
-                        DropdownMenu(menu, { menu = false }, shape = RoundedCornerShape(20.dp)) {
-                            DropdownMenuItem(text = { Text("Hidden books") }, leadingIcon = { Icon(Icons.Rounded.VisibilityOff, null) },
-                                onClick = { menu = false; filter = Filter.HIDDEN })
-                            DropdownMenuItem(text = { Text("Full rescan") }, leadingIcon = { Icon(Icons.Rounded.Refresh, null) },
-                                onClick = { menu = false; app.scanner.enqueue(full = true) })
-                            DropdownMenuItem(text = { Text("Settings") }, leadingIcon = { Icon(Icons.Rounded.Settings, null) },
-                                onClick = { menu = false; onSettings() })
-                        }
-                    }
+                    // Settings sits top-right on every top-level page. Full rescan lives in Settings › Library.
+                    IconButton(onSettings) { Icon(Icons.Rounded.Settings, "Settings") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
+            val anyHidden = all.any { it.book.hidden }
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Filter.entries.filter { it != Filter.HIDDEN || filter == Filter.HIDDEN }.forEach {
+                Filter.entries.filter { it != Filter.HIDDEN || anyHidden || filter == Filter.HIDDEN }.forEach {
                     val count = all.count { b -> if (it == Filter.HIDDEN) b.book.hidden else !b.book.hidden && (it == Filter.ALL || b.book.state.name == it.name) }
                     FilterChip(filter == it, { filter = it; folderPath = emptyList() }, { Text("${it.label}  $count") },
                         shape = CircleShape, modifier = Modifier.animateContentSize(),
@@ -196,28 +184,39 @@ fun LibraryScreen(startSearch: Boolean, onOpenBook: (String) -> Unit, onSettings
                 }
             }
         }
-        if (searching) {
-            SearchBar(
-                inputField = {
-                    SearchBarDefaults.InputField(
-                        query = query, onQueryChange = { query = it }, onSearch = {}, expanded = true,
-                        onExpandedChange = { if (!it) { searching = false; query = "" } },
-                        placeholder = { Text("Search title, author, narrator") },
-                        leadingIcon = {
-                            IconButton({ searching = false; query = "" }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Close search") }
-                        },
-                        trailingIcon = {
-                            if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Icons.Rounded.Close, "Clear") }
-                        },
-                    )
-                },
-                expanded = true, onExpandedChange = { if (!it) { searching = false; query = "" } },
-            ) {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(4.dp)) {
-                    if (query.isNotBlank() && results.isEmpty()) item { EmptyPlaceholder(Icons.Rounded.SearchOff, "No matches", "Nothing matches \"$query\".") }
-                    items(results, key = { it.book.id }) { BookRow(it, { onOpenBook(it.book.id) }, { sheet = it.book }, playing = it.book.id == playingId) }
-                }
-            }
+    }
+    sheet?.let { BookActionsSheet(it) { sheet = null } }
+}
+
+/** Full-screen book search, its own destination so back returns to wherever it was opened. */
+@Composable
+fun SearchScreen(onOpenBook: (String) -> Unit, onClose: () -> Unit) {
+    val app = app(LocalContext.current)
+    val items by rememberBookItems()
+    val now by app.player.state.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
+    var sheet by remember { mutableStateOf<Book?>(null) }
+    val playingId = if (now.isPlaying) now.book?.id else null
+    val results = if (query.isBlank()) emptyList() else items.orEmpty().filter { !it.book.hidden && listOfNotNull(it.book.title, it.book.author, it.book.narrator)
+        .any { s -> s.contains(query, ignoreCase = true) } }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    SearchBar(
+        inputField = {
+            SearchBarDefaults.InputField(
+                modifier = Modifier.focusRequester(focus),
+                query = query, onQueryChange = { query = it }, onSearch = {}, expanded = true,
+                onExpandedChange = { if (!it) onClose() },
+                placeholder = { Text("Search title, author, narrator") },
+                leadingIcon = { IconButton(onClose) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Close search") } },
+                trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Icons.Rounded.Close, "Clear") } },
+            )
+        },
+        expanded = true, onExpandedChange = { if (!it) onClose() },
+    ) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(4.dp)) {
+            if (query.isNotBlank() && results.isEmpty()) item { EmptyPlaceholder(Icons.Rounded.SearchOff, "No matches", "Nothing matches \"$query\".") }
+            items(results, key = { it.book.id }) { BookRow(it, { onOpenBook(it.book.id) }, { sheet = it.book }, playing = it.book.id == playingId) }
         }
     }
     sheet?.let { BookActionsSheet(it) { sheet = null } }

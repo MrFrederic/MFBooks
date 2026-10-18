@@ -14,7 +14,8 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MFBooks">
+        android:theme="@style/Theme.MFBooks"
+        android:enableOnBackInvokedCallback="true">
 
         <activity
             android:name=".MainActivity"
