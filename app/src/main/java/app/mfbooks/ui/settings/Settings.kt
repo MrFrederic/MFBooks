@@ -111,7 +111,7 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) = SettingsH
             SettingsPage.groups.forEach { group ->
                 Column(Modifier.padding(horizontal = 16.dp).padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                     group.forEachIndexed { i, p ->
-                        SettingRow(ListItemDefaults.segmentedShapes(i, group.size), p.title, env.summary(p), p.icon, p.tone, onClick = { env.navigate("settings/${p.route}") })
+                        SettingRow(ListItemDefaults.segmentedShapes(i, group.size), p.title, p.summary, p.icon, onClick = { env.navigate("settings/${p.route}") })
                     }
                 }
             }

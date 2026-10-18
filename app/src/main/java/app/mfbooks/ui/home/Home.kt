@@ -24,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Button
@@ -41,7 +40,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.carousel.HorizontalCenteredHeroCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,7 +77,7 @@ import app.mfbooks.ui.theme.glowBackdrop
 import app.mfbooks.ui.theme.tabular
 
 @Composable
-fun HomeScreen(onOpenBook: (String) -> Unit, onSearch: () -> Unit, onSettings: () -> Unit) {
+fun HomeScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit) {
     val ctx = LocalContext.current
     val app = app(ctx)
     val items by rememberBookItems()
@@ -111,7 +112,6 @@ fun HomeScreen(onOpenBook: (String) -> Unit, onSearch: () -> Unit, onSettings: (
                         }
                     },
                     actions = {
-                        IconButton(onSearch) { Icon(Icons.Rounded.Search, "Search") }
                         IconButton(onSettings) { Icon(Icons.Rounded.Settings, "Settings") }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -178,7 +178,11 @@ private fun HeroCarousel(
     list: List<BookItem>, currentId: String?, playing: Boolean, chapter: String?,
     onOpen: (String) -> Unit, onLong: (Book) -> Unit, onPlay: (String) -> Unit,
 ) {
-    val state = rememberCarouselState { list.size }
+    val count by rememberUpdatedState(list.size)
+    val state = rememberCarouselState { count }
+    // Starting a book moves it to the front: follow it there instead of staying on the old index.
+    val first = list.firstOrNull()?.book?.id
+    LaunchedEffect(first) { if (state.currentItem != 0) state.animateScrollToItem(0) }
     // ponytail: a lone book gets a plain full-width card; the hero carousel would bleed it to the screen edge.
     if (list.size == 1) {
         Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(320.dp)) { HeroCard(list[0], currentId, playing, chapter, onOpen, onLong, onPlay, 1f) }

@@ -28,7 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
-class Choice<T>(val value: T, val label: String, val description: String? = null)
+class Choice<T>(val value: T, val label: String)
 
 @Composable
 private fun <T> RadioOption(c: Choice<T>, selected: Boolean, onClick: () -> Unit) {
@@ -37,14 +37,11 @@ private fun <T> RadioOption(c: Choice<T>, selected: Boolean, onClick: () -> Unit
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected, null, Modifier.padding(start = 8.dp))
-        Column(Modifier.padding(start = 16.dp, end = 8.dp).padding(vertical = 6.dp)) {
-            Text(c.label, style = MaterialTheme.typography.bodyLarge)
-            c.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
+        Text(c.label, Modifier.padding(start = 16.dp, end = 8.dp).padding(vertical = 10.dp), style = MaterialTheme.typography.bodyLarge)
     }
 }
 
-/** Single-choice dialog with radio options; each option may carry a short explanation. */
+/** Single-choice dialog with radio options. */
 @Composable
 fun <T> ChoiceDialog(title: String, options: List<Choice<T>>, selected: T, onSelect: (T) -> Unit, dismiss: () -> Unit) {
     AlertDialog(

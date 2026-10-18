@@ -41,7 +41,6 @@ import app.mfbooks.ui.components.SettingsGroup
 import app.mfbooks.ui.components.app
 import app.mfbooks.ui.components.formatHm
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 /** Long-press sheet (§7.3). ponytail: queue / cover / edit / delete actions omitted for now. */
 @Composable
@@ -82,10 +81,6 @@ fun BookActionsSheet(book: Book, startInfo: Boolean = false, onDismiss: () -> Un
                         GroupRow("Book info", icon = Icons.Rounded.Info, onClick = { info = true }),
                     ), Modifier.padding(top = 8.dp))
                 } else {
-                    val sources = remember(book.fieldSources) {
-                        runCatching { JSONObject(book.fieldSources ?: "{}").let { o -> o.keys().asSequence().map { it to o.optString(it) }.toList() } }
-                            .getOrDefault(emptyList())
-                    }
                     Column {
                         SettingsGroup("Details", listOfNotNull(
                             GroupRow("Path", book.relativePath),
@@ -98,7 +93,6 @@ fun BookActionsSheet(book: Book, startInfo: Boolean = false, onDismiss: () -> Un
                             book.genre?.let { GroupRow("Genre", it) },
                             book.publisher?.let { GroupRow("Publisher", it) },
                         ))
-                        if (sources.isNotEmpty()) SettingsGroup("Metadata sources", sources.map { (k, v) -> GroupRow(k, v) })
                     }
                 }
             }

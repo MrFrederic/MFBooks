@@ -38,17 +38,12 @@ class Section(val title: String?, val items: List<Item>, val footer: String? = n
 
 private val rowColors @Composable get() = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f))
 
-/** Icon tile; [tone] 0..2 picks the primary/secondary/tertiary container so the root list isn't one flat colour. */
+/** Icon tile in the primary container colour, the same on the root list and every page. */
 @Composable
-fun Tile(icon: ImageVector, tone: Int = 0) {
+fun Tile(icon: ImageVector) {
     val cs = MaterialTheme.colorScheme
-    val (bg, fg) = when (tone % 3) {
-        0 -> cs.primaryContainer to cs.onPrimaryContainer
-        1 -> cs.secondaryContainer to cs.onSecondaryContainer
-        else -> cs.tertiaryContainer to cs.onTertiaryContainer
-    }
-    Box(Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(bg), Alignment.Center) {
-        Icon(icon, null, Modifier.size(22.dp), tint = fg)
+    Box(Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(cs.primaryContainer), Alignment.Center) {
+        Icon(icon, null, Modifier.size(22.dp), tint = cs.onPrimaryContainer)
     }
 }
 
@@ -58,13 +53,12 @@ fun SettingRow(
     title: String,
     summary: String? = null,
     icon: ImageVector? = null,
-    tone: Int = 0,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     below: (@Composable () -> Unit)? = null,
     value: String? = null,
 ) {
-    val lead: (@Composable () -> Unit)? = icon?.let { { Tile(it, tone) } }
+    val lead: (@Composable () -> Unit)? = icon?.let { { Tile(it) } }
     val sup: (@Composable () -> Unit)? = if (summary == null && below == null) null else {
         {
             Column {
