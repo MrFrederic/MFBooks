@@ -14,6 +14,15 @@ android {
         versionCode = 1
         versionName = "0.1.0"
     }
+    // Release signing from env (CI secrets); unsigned release build when absent.
+    val ks = System.getenv("SIGNING_KEYSTORE")
+    if (ks != null) signingConfigs.create("release") {
+        storeFile = file(ks)
+        storePassword = System.getenv("SIGNING_PASSWORD")
+        keyAlias = System.getenv("SIGNING_ALIAS") ?: "mfbooks"
+        keyPassword = System.getenv("SIGNING_PASSWORD")
+    }
+    buildTypes { release { signingConfig = signingConfigs.findByName("release") } }
     buildFeatures { compose = true }
 }
 

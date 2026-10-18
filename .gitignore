@@ -16,3 +16,4 @@ local.properties
 .zshrc
 .mcp.json
 .claude
+*.jks
