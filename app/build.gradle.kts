@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -11,8 +12,8 @@ android {
         applicationId = "app.mfbooks"
         minSdk = 29
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
     }
     // Release signing from env (CI secrets); unsigned release build when absent.
     val ks = System.getenv("SIGNING_KEYSTORE")
@@ -52,6 +53,8 @@ dependencies {
     implementation(libs.material.kolor)
     implementation(libs.car.app)
     implementation(libs.juniversalchardet)
+    implementation(project(":shared"))
+    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.json) // android's org.json is a stub on the JVM

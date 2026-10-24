@@ -77,7 +77,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.contentColorFor
 import androidx.compose.ui.graphics.takeOrElse
-import app.mfbooks.ui.components.CoverBackdrop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -115,18 +114,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.mfbooks.MFBooksApp
-import app.mfbooks.data.ProgressFormat
-import app.mfbooks.data.Settings
-import app.mfbooks.playback.NowPlaying
-import app.mfbooks.playback.SleepMode
-import app.mfbooks.ui.components.Cover
 import app.mfbooks.ui.components.formatClock
-import app.mfbooks.ui.theme.LocalGlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.material.icons.rounded.Devices
+import app.mfbooks.data.ProgressFormat
+import app.mfbooks.data.Settings
+import app.mfbooks.playback.NowPlaying
+import app.mfbooks.playback.SleepMode
+import app.mfbooks.server.Server
+import app.mfbooks.ui.components.Cover
+import app.mfbooks.ui.components.CoverBackdrop
+import app.mfbooks.ui.server.ConnectSheet
+import app.mfbooks.ui.server.PlayingOnStrip
+import app.mfbooks.ui.theme.LocalGlow
 
 private enum class Sheet { Speed, Sleep, Eq, Boost, Bookmark, Lists }
 
@@ -150,6 +154,8 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     var listTab by remember { mutableStateOf(ListTab.Chapters) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var connect by remember { mutableStateOf(false) }
+    val link by Server.link.collectAsStateWithLifecycle()
     val cs = MaterialTheme.colorScheme
 
     fun openLists(tab: ListTab) { listTab = tab; sheet = Sheet.Lists }
@@ -179,7 +185,9 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
                 onLock = { scope.launch { app.prefs.update { it.copy(lockControls = !locked) } } },
                 onSkipSilence = { player.setSkipSilence(!np.skipSilence) },
                 onHistory = { openLists(ListTab.History) }, onChapters = { openLists(ListTab.Chapters) },
-                onAddWithNote = { sheet = Sheet.Bookmark }, onDetails = { onOpenBook(book.id) }, onSettings = onSettings)
+                onAddWithNote = { sheet = Sheet.Bookmark }, onDetails = { onOpenBook(book.id) }, onSettings = onSettings,
+                onConnect = if (link != null) { { connect = true } } else null)
+            PlayingOnStrip()
 
             // Whole-book block: title, thin progress bar, "Read x of y · n% · Left z".
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -254,6 +262,7 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
         }
     }
 
+    if (connect) ConnectSheet { connect = false }
     when (sheet) {
         Sheet.Speed -> SpeedSheet(np.speed, onEq = { sheet = Sheet.Eq }, onBoost = { sheet = Sheet.Boost }) { sheet = null }
         Sheet.Sleep -> SleepSheet(np.sleep.mode) { sheet = null }
@@ -292,7 +301,7 @@ private fun ToolRow(
     onSleep: () -> Unit, onSleepLong: () -> Unit, onBoost: () -> Unit, onEq: () -> Unit, onSpeed: () -> Unit, onSpeedLong: () -> Unit,
     onBookmarks: () -> Unit, onBookmarkAdd: () -> Unit, onLock: () -> Unit,
     onSkipSilence: () -> Unit, onHistory: () -> Unit, onChapters: () -> Unit, onAddWithNote: () -> Unit, onDetails: () -> Unit,
-    onSettings: () -> Unit,
+    onSettings: () -> Unit, onConnect: (() -> Unit)?,
 ) {
     val cs = MaterialTheme.colorScheme
     var menu by remember { mutableStateOf(false) }
@@ -335,6 +344,7 @@ private fun ToolRow(
             content = if (locked) cs.error else null) {
             Icon(if (locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen, null, Modifier.size(22.dp))
         }
+        if (onConnect != null) HoldIconButton(onConnect, {}, "Devices", h, RoundedCornerShape(16.dp), none, m) { Icon(Icons.Rounded.Devices, null, Modifier.size(22.dp)) }
         CastButton(m)
         Box(m) {
             HoldIconButton({ menu = true }, {}, "More options", h, RoundedCornerShape(16.dp), none, Modifier.fillMaxWidth().height(h), enabled = !locked) {

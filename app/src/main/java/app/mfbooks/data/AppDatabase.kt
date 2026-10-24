@@ -11,6 +11,8 @@ import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 class Converters {
@@ -114,13 +116,116 @@ interface UserDataDao {
     @Query("SELECT * FROM ListeningSession WHERE bookPath = :path AND startedAt = :at LIMIT 1") suspend fun sessionAt(path: String, at: Long): ListeningSession?
 }
 
+@Dao
+interface SyncDao {
+    @Query("SELECT * FROM PendingChange ORDER BY id") suspend fun pending(): List<PendingChange>
+    @Query("SELECT COALESCE(MAX(id), 0) FROM PendingChange") suspend fun maxPending(): Long
+    @Query("DELETE FROM PendingChange WHERE id <= :id") suspend fun deletePendingUpTo(id: Long)
+    @Query("DELETE FROM PendingChange WHERE id > :id") suspend fun deletePendingAbove(id: Long)
+    @Query("SELECT DISTINCT tbl || ':' || `key` FROM PendingChange WHERE id > :id") suspend fun pendingKeysAbove(id: Long): List<String>
+    @Insert suspend fun addPending(p: PendingChange)
+    @Query("DELETE FROM PendingChange") suspend fun clearPending()
+
+    @Query("SELECT seq FROM SyncSeen WHERE `key` = :key") suspend fun seen(key: String): Long?
+    @Upsert suspend fun setSeen(s: SyncSeen)
+    @Query("DELETE FROM SyncSeen") suspend fun clearSeen()
+
+    @Query("SELECT * FROM Book WHERE serverId = :sid LIMIT 1") suspend fun bookByServerId(sid: String): Book?
+    @Query("SELECT * FROM Book WHERE serverId IS NULL") suspend fun booksWithoutServerId(): List<Book>
+    @Query("SELECT * FROM Book WHERE serverId IS NOT NULL") suspend fun syncedBooks(): List<Book>
+    @Query("UPDATE Book SET serverId = :sid WHERE id = :id") suspend fun setServerId(id: String, sid: String?)
+    @Query("UPDATE Book SET state = :state, lastPlayedAt = :lastPlayedAt, hidden = :hidden, queuePosition = :queuePosition WHERE id = :id")
+    suspend fun applyBookState(id: String, state: BookState, lastPlayedAt: Long?, hidden: Boolean, queuePosition: Int?)
+
+    @Query("SELECT * FROM Bookmark WHERE uuid = :uuid") suspend fun bookmark(uuid: String): Bookmark?
+    @Upsert suspend fun upsertBookmark(b: Bookmark)
+    @Query("DELETE FROM Bookmark WHERE uuid = :uuid") suspend fun deleteBookmark(uuid: String)
+    @Query("SELECT * FROM HistoryEvent WHERE uuid = :uuid") suspend fun history(uuid: String): HistoryEvent?
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertHistory(e: HistoryEvent)
+    @Query("SELECT * FROM ListeningSession WHERE uuid = :uuid") suspend fun session(uuid: String): ListeningSession?
+    @Upsert suspend fun upsertSession(s: ListeningSession)
+
+    /** Books with at least one streamed track (offloaded or cloud-only). */
+    @Query("SELECT DISTINCT bookId FROM Track WHERE uri LIKE 'http%'") fun remoteBookIds(): Flow<List<String>>
+    @Query("UPDATE Track SET uri = :uri, fileName = :fileName, sizeBytes = :size WHERE bookId = :bookId AND `index` = :index")
+    suspend fun setTrack(bookId: String, index: Int, uri: String, fileName: String, size: Long)
+    @Query("UPDATE Track SET sha256 = :sha WHERE bookId = :bookId AND `index` = :index") suspend fun setSha(bookId: String, index: Int, sha: String)
+
+    @Query("UPDATE Book SET id = :new, rootUri = :root, folderUri = :folder, relativePath = :rel, scanSignature = '' WHERE id = :old")
+    suspend fun moveBookRow(old: String, new: String, root: String, folder: String, rel: String)
+    @Query("UPDATE Track SET bookId = :new WHERE bookId = :old") suspend fun moveTracks(old: String, new: String)
+    @Query("UPDATE Chapter SET bookId = :new WHERE bookId = :old") suspend fun moveChapters(old: String, new: String)
+    @Query("UPDATE BookProgress SET bookId = :new WHERE bookId = :old") suspend fun moveProgress(old: String, new: String)
+    @Query("UPDATE BookSettings SET bookId = :new WHERE bookId = :old") suspend fun moveSettings(old: String, new: String)
+    @Query("UPDATE Bookmark SET bookId = :new WHERE bookId = :old") suspend fun moveBookmarks(old: String, new: String)
+    @Query("UPDATE HistoryEvent SET bookId = :new WHERE bookId = :old") suspend fun moveHistory(old: String, new: String)
+    @Query("UPDATE ListeningSession SET bookId = :new WHERE bookId = :old") suspend fun moveSessions(old: String, new: String)
+
+    /** A downloaded cloud-only book becomes a folder book: give it the id the scanner computes for that folder. */
+    @Transaction
+    suspend fun rekey(old: String, new: String, root: String, folder: String, rel: String) {
+        moveBookRow(old, new, root, folder, rel); moveTracks(old, new); moveChapters(old, new); moveProgress(old, new)
+        moveSettings(old, new); moveBookmarks(old, new); moveHistory(old, new); moveSessions(old, new)
+    }
+}
+
+private const val NOW = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)"
+private const val ON = "EXISTS (SELECT 1 FROM SyncSeen WHERE `key` = 'enabled')"
+private fun trigger(name: String, event: String, kind: String, key: String, extra: String = "") =
+    "CREATE TRIGGER IF NOT EXISTS sync_$name AFTER $event WHEN $ON $extra BEGIN INSERT INTO PendingChange(tbl, `key`, at) VALUES ('$kind', $key, $NOW); END"
+
+/** Every write the server must hear about queues a [PendingChange], but only while a server is connected. */
+val SYNC_TRIGGERS = listOf(
+    trigger("progress_i", "INSERT ON BookProgress", "progress", "NEW.bookId"),
+    trigger("progress_u", "UPDATE ON BookProgress", "progress", "NEW.bookId"),
+    trigger("settings_i", "INSERT ON BookSettings", "book_settings", "NEW.bookId"),
+    trigger("settings_u", "UPDATE ON BookSettings", "book_settings", "NEW.bookId"),
+    trigger("book_i", "INSERT ON Book", "book", "NEW.id"),
+    trigger("book_u", "UPDATE OF state, lastPlayedAt, hidden, queuePosition ON Book", "book", "NEW.id",
+        "AND (OLD.state IS NOT NEW.state OR OLD.lastPlayedAt IS NOT NEW.lastPlayedAt OR OLD.hidden IS NOT NEW.hidden OR OLD.queuePosition IS NOT NEW.queuePosition)"),
+    trigger("bookmark_i", "INSERT ON Bookmark", "bookmark", "NEW.uuid"),
+    trigger("bookmark_d", "DELETE ON Bookmark", "bookmark", "OLD.uuid"),
+    trigger("history_i", "INSERT ON HistoryEvent", "history", "NEW.uuid"),
+    trigger("session_i", "INSERT ON ListeningSession", "session", "NEW.uuid"),
+    trigger("session_u", "UPDATE ON ListeningSession", "session", "NEW.uuid"),
+)
+
+/** v2: MFBooks Server sync (server ids, uuids, the change queue). */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        listOf(
+            "ALTER TABLE Book ADD COLUMN serverId TEXT",
+            "ALTER TABLE Track ADD COLUMN sha256 TEXT",
+            "ALTER TABLE BookSettings ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE Bookmark ADD COLUMN uuid TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE Bookmark ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0",
+            "UPDATE Bookmark SET uuid = lower(hex(randomblob(16))), updatedAt = createdAt",
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_Bookmark_uuid ON Bookmark(uuid)",
+            "ALTER TABLE HistoryEvent ADD COLUMN uuid TEXT NOT NULL DEFAULT ''",
+            "UPDATE HistoryEvent SET uuid = lower(hex(randomblob(16)))",
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_HistoryEvent_uuid ON HistoryEvent(uuid)",
+            "ALTER TABLE ListeningSession ADD COLUMN uuid TEXT NOT NULL DEFAULT ''",
+            "UPDATE ListeningSession SET uuid = lower(hex(randomblob(16)))",
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_ListeningSession_uuid ON ListeningSession(uuid)",
+            "CREATE TABLE IF NOT EXISTS PendingChange (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, tbl TEXT NOT NULL, `key` TEXT NOT NULL, at INTEGER NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS SyncSeen (`key` TEXT NOT NULL, seq INTEGER NOT NULL, PRIMARY KEY(`key`))",
+        ).forEach(db::execSQL)
+    }
+}
+
+/** Triggers aren't part of Room's schema: (re)create them on every open, which also covers fresh installs. */
+val SYNC_CALLBACK = object : RoomDatabase.Callback() {
+    override fun onOpen(db: SupportSQLiteDatabase) = SYNC_TRIGGERS.forEach(db::execSQL)
+}
+
 @Database(
     entities = [RootFolder::class, Book::class, Track::class, Chapter::class, BookProgress::class,
-        BookSettings::class, Bookmark::class, HistoryEvent::class, ListeningSession::class],
-    version = 1,
+        BookSettings::class, Bookmark::class, HistoryEvent::class, ListeningSession::class, PendingChange::class, SyncSeen::class],
+    version = 2,
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun library(): LibraryDao
     abstract fun userData(): UserDataDao
+    abstract fun sync(): SyncDao
 }

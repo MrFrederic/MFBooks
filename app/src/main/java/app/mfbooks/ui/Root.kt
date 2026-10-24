@@ -65,26 +65,28 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import app.mfbooks.ui.components.app
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.roundToInt
 import app.mfbooks.data.EndOfBook
 import app.mfbooks.data.Settings
+import app.mfbooks.server.Server
 import app.mfbooks.ui.book.BookDetailScreen
 import app.mfbooks.ui.components.FloatingNav
 import app.mfbooks.ui.components.LocalChromePadding
 import app.mfbooks.ui.components.LocalSnackbar
 import app.mfbooks.ui.components.NavEntry
-import app.mfbooks.ui.components.app
 import app.mfbooks.ui.convert.ConvertScreen
 import app.mfbooks.ui.home.HomeScreen
 import app.mfbooks.ui.library.LibraryScreen
 import app.mfbooks.ui.library.SearchScreen
 import app.mfbooks.ui.player.FullPlayer
 import app.mfbooks.ui.player.MiniPlayer
+import app.mfbooks.ui.server.FreeUpScreen
 import app.mfbooks.ui.settings.SettingsPageScreen
 import app.mfbooks.ui.settings.SettingsScreen
 import app.mfbooks.ui.stats.StatsScreen
 import app.mfbooks.ui.theme.MFBooksTheme
-import kotlin.coroutines.cancellation.CancellationException
-import kotlin.math.roundToInt
 
 private val tabs = listOf("home", "library", "stats")
 private val navEntries = listOf(
@@ -146,6 +148,9 @@ private fun Shell(hasBook: Boolean) {
     }
 
     val ctx = LocalContext.current
+    // A pairing QR code scanned with the camera opens the Server page with the code filled in.
+    val pair by Server.pendingPair.collectAsStateWithLifecycle()
+    LaunchedEffect(pair) { if (pair != null) nav.navigate("settings/server") { launchSingleTop = true } }
     LaunchedEffect(Unit) {
         // End of book with "Show library": collapse the player and land on the Library tab.
         app(ctx).player.bookEnded.collect {
@@ -162,7 +167,7 @@ private fun Shell(hasBook: Boolean) {
                 popEnterTransition = { EnterTransition.None }, popExitTransition = { fadeOut() },
                 predictivePopEnterTransition = { EnterTransition.None }, predictivePopExitTransition = { fadeOut() }) {
                 page("home") { HomeScreen(::openBook, ::openSettings) }
-                page("library") { LibraryScreen(::openBook, ::openSettings) }
+                page("library") { LibraryScreen(::openBook, ::openSettings) { nav.navigate("settings/server") { launchSingleTop = true } } }
                 page("search") { SearchScreen(::openBook) { nav.popBackStack() } }
                 page("stats") { StatsScreen(::openSettings) }
                 page("book/{id}", listOf(navArgument("id") { type = NavType.StringType })) {
@@ -173,6 +178,7 @@ private fun Shell(hasBook: Boolean) {
                     SettingsPageScreen(it.arguments?.getString("page"), { nav.popBackStack() }, nav::navigate)
                 }
                 page("convert") { ConvertScreen { nav.popBackStack() } }
+                page("freeup") { FreeUpScreen { nav.popBackStack() } }
             }
             // Status-bar scrim so scrolled content doesn't fight the clock and icons.
             Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars)

@@ -57,6 +57,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.mfbooks.ui.components.app
+import app.mfbooks.ui.components.formatClock
+import app.mfbooks.ui.components.formatHm
+import app.mfbooks.ui.components.rememberBookItems
+import app.mfbooks.ui.theme.comfortable
+import app.mfbooks.ui.theme.tabular
+import coil3.compose.AsyncImage
 import app.mfbooks.data.Book
 import app.mfbooks.data.BookState
 import app.mfbooks.data.Chapter
@@ -66,15 +73,9 @@ import app.mfbooks.ui.components.LocalChromePadding
 import app.mfbooks.ui.components.Panel
 import app.mfbooks.ui.components.PlayingBars
 import app.mfbooks.ui.components.SectionHeader
-import app.mfbooks.ui.components.app
-import app.mfbooks.ui.components.formatClock
-import app.mfbooks.ui.components.formatHm
-import app.mfbooks.ui.components.rememberBookItems
 import app.mfbooks.ui.library.BookActionsSheet
+import app.mfbooks.ui.server.BookCloudPanel
 import app.mfbooks.ui.theme.LocalGlow
-import app.mfbooks.ui.theme.comfortable
-import app.mfbooks.ui.theme.tabular
-import coil3.compose.AsyncImage
 
 @Composable
 fun BookDetailScreen(bookId: String, onBack: () -> Unit) {
@@ -173,6 +174,7 @@ fun BookDetailScreen(bookId: String, onBack: () -> Unit) {
                     }
                 }
             }
+            item { BookCloudPanel(b, Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)) }
             item { SectionHeader("Chapters") }
             itemsIndexed(chapters, key = { _, c -> c.index }) { i, c ->
                 ChapterRow(c, current = i == currentIdx, listened = i < currentIdx, playing = loaded && now.isPlaying && i == currentIdx,

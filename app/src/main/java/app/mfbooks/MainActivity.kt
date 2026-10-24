@@ -22,8 +22,15 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    /** Phone voice: "play <title> on MFBooks". */
+    override fun onStart() { super.onStart(); app.mfbooks.server.Live.setForeground(true); app.mfbooks.server.Sync.request(this) }
+    override fun onStop() { app.mfbooks.server.Live.setForeground(false); super.onStop() }
+
+    /** Phone voice: "play <title> on MFBooks"; `mfbooks://pair?server=…&code=…` from the web player's QR code (C1). */
     private fun handleIntent(intent: Intent?) {
+        intent?.data?.takeIf { it.scheme == "mfbooks" && it.host == "pair" }?.let { u ->
+            val server = u.getQueryParameter("server"); val code = u.getQueryParameter("code")
+            if (server != null && code != null) app.mfbooks.server.Server.pendingPair.value = server to code
+        }
         if (intent?.action == MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH) {
             MFBooksApp.get(this).player.playFromSearch(intent.getStringExtra(SearchManager.QUERY).orEmpty())
         }

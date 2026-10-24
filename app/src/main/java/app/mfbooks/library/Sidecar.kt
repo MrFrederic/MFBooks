@@ -84,6 +84,7 @@ object Sidecar {
         val doc = sc?.let { JSONObject(it.toString()) } ?: JSONObject()
         val b = s.book
         doc.put("v", 1)
+        b.serverId?.let { doc.put("serverId", it) } // survives renames, re-tags and a reinstall (book identity)
         doc.put("book", (doc.optJSONObject("book") ?: JSONObject()).also {
             it.put("title", b.title); it.put("author", b.author); it.put("narrator", b.narrator); it.put("year", b.year)
             it.put("genre", b.genre); it.put("publisher", b.publisher); it.put("series", b.series)

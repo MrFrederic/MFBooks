@@ -1,0 +1,11 @@
+*
+!gradlew
+!settings.gradle.kts
+!build.gradle.kts
+!gradle.properties
+!gradle/
+!shared/
+!server/
+**/build/
+**/node_modules/
+server/web/dist/

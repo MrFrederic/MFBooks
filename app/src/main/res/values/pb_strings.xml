@@ -20,6 +20,7 @@
     <string name="pb_speed">Speed %1$s</string>
     <string name="pb_add_bookmark">Add bookmark</string>
     <string name="pb_bookmark_added">Bookmark added</string>
+    <string name="pb_server_unreachable">Can\'t reach the server. Download the book to listen offline.</string>
     <string name="pb_sleep_off">Sleep timer: off</string>
     <string name="pb_sleep_on">Sleep timer: on</string>
     <string name="pb_sleep_15">Sleep timer: 15 min</string>

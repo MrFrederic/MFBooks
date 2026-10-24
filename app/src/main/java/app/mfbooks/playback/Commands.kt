@@ -15,7 +15,7 @@ enum class Command {
     /** Seconds skip by an explicit amount: extra [EXTRA_MS] (negative = rewind). */
     SEEK_BY,
     // Used by PlayerConnection (and accepted from Tasker too).
-    /** [EXTRA_BOOK_ID], optional [EXTRA_CHAPTER], [EXTRA_FROM_START]. */
+    /** [EXTRA_BOOK_ID], optional [EXTRA_CHAPTER], [EXTRA_FROM_START], or [EXTRA_TRACK] + [EXTRA_MS] for an exact position. */
     PLAY_BOOK,
     /** [EXTRA_QUERY]; empty = last played book. */
     PLAY_SEARCH,

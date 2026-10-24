@@ -20,6 +20,11 @@ import com.google.android.gms.cast.framework.OptionsProvider
 import com.google.android.gms.cast.framework.SessionProvider
 import com.google.android.gms.cast.framework.media.CastMediaOptions
 import com.google.android.gms.common.images.WebImage
+import app.mfbooks.server.Server
+import app.mfbooks.server.num
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.BufferedReader
 import java.io.FileInputStream
 import java.io.InputStreamReader
@@ -132,7 +137,8 @@ private class CastItemConverter(private val server: MediaServer) : MediaItemConv
     override fun toMediaQueueItem(item: MediaItem): MediaQueueItem {
         val uri = item.localConfiguration?.uri ?: error("no uri")
         // a distinct URL per chapter: Media3 tracks remote items by content id, and every chapter is the same file
-        val url = server.url(uri, item.mediaId.substringAfterLast('/')) ?: error("no Wi-Fi address to serve from")
+        val url = if (Server.isServerUrl(uri.toString())) ServerLinks.get(uri.toString()) ?: error("no signed link yet for $uri")
+            else server.url(uri, item.mediaId.substringAfterLast('/')) ?: error("no Wi-Fi address to serve from")
         items[url] = item
         val md = item.mediaMetadata
         val meta = MediaMetadata(MediaMetadata.MEDIA_TYPE_AUDIOBOOK_CHAPTER).apply {
@@ -159,6 +165,22 @@ private class CastItemConverter(private val server: MediaServer) : MediaItemConv
         val id = q.media?.contentId ?: q.media?.contentUrl
         return items[id] ?: MediaItem.Builder().setUri(id).setMediaId(id ?: "").build()
     }
+}
+
+/** O4: the receiver fetches cloud books straight from the server through signed, short-lived links (it can't send our token). */
+object ServerLinks {
+    private val links = ConcurrentHashMap<String, Pair<String, Long>>() // our track URL → (signed URL, expiry)
+
+    suspend fun prefetch(serverId: String) = runCatching {
+        val r = Server.post("/books/$serverId/links").jsonObject
+        val exp = r.num("expiresAt")?.toLong() ?: return@runCatching
+        r["files"]?.jsonArray?.forEach { u ->
+            val signed = u.jsonPrimitive.content
+            signed.substringAfter("/files/").substringBefore('?').toIntOrNull()?.let { links[Server.fileUrl(serverId, it)] = signed to exp }
+        }
+    }
+
+    fun get(uri: String) = links[uri]?.takeIf { it.second > System.currentTimeMillis() + 60_000 }?.first
 }
 
 /**

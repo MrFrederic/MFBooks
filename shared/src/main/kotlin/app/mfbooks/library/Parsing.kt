@@ -40,6 +40,13 @@ data class TagInfo(
     val copyright: String? = null,     // ©2019 X;(P)2019 Publisher — publisher/year fallback
 )
 
+/** Fill gaps in this TagInfo from [o]. */
+fun TagInfo.fill(o: TagInfo?): TagInfo = if (o == null) this else TagInfo(
+    title ?: o.title, artist ?: o.artist, albumArtist ?: o.albumArtist, album ?: o.album, composer ?: o.composer,
+    narrator ?: o.narrator, year ?: o.year, genre ?: o.genre, publisher ?: o.publisher, series ?: o.series,
+    comment ?: o.comment, description ?: o.description, encoder ?: o.encoder, copyright ?: o.copyright,
+)
+
 data class NfoData(
     val title: String? = null,
     val author: String? = null,

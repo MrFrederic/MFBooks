@@ -3,6 +3,7 @@ package app.mfbooks.data
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.util.UUID
 
 enum class BookState { NEW, STARTED, FINISHED }
 
@@ -35,13 +36,18 @@ data class Book(
     val description: String?,
     val fieldSources: String?,         // JSON {"title":"nfo","chapters":"embedded-timing+cue-titles",...}
     val scanSignature: String,
+    val serverId: String? = null,      // the book's UUID on MFBooks Server; cloud-only books use it as [id] too
 )
 
 @Entity(primaryKeys = ["bookId", "index"])
 data class Track(
     val bookId: String, val index: Int, val uri: String, val fileName: String,
     val title: String?, val durationMs: Long, val sizeBytes: Long, val mtime: Long,
-)
+    val sha256: String? = null,
+) {
+    /** Streamed from the server (offloaded or cloud-only book). */
+    val isRemote get() = uri.startsWith("http")
+}
 
 /** == reference "GlobalChapter". Books without real chapters get one chapter per track. */
 @Entity(primaryKeys = ["bookId", "index"])
@@ -72,25 +78,40 @@ data class BookSettings(
     val skipStartMs: Long? = null,
     val skipEndMs: Long? = null,
     val repeatMode: String? = null,
+    val updatedAt: Long = 0,
 )
 
-@Entity(indices = [Index("bookId")])
+@Entity(indices = [Index("bookId"), Index("uuid", unique = true)])
 data class Bookmark(
     @PrimaryKey(autoGenerate = true) val id: Long = 0, val bookId: String,
     val trackIndex: Int, val positionMs: Long, val title: String, val note: String?, val createdAt: Long,
+    val uuid: String = UUID.randomUUID().toString(), val updatedAt: Long = createdAt,
 )
 
-@Entity(indices = [Index("bookId")])
+@Entity(indices = [Index("bookId"), Index("uuid", unique = true)])
 data class HistoryEvent(
     @PrimaryKey(autoGenerate = true) val id: Long = 0, val bookId: String,
     val action: String, // PREV,NEXT,START,PAUSE,BACK,FWD,SEEK,SLEEP
     val trackIndex: Int, val positionMs: Long, val at: Long,
+    val uuid: String = UUID.randomUUID().toString(),
 )
 
 /** Denormalised so stats survive book deletion. */
-@Entity
+@Entity(indices = [Index("uuid", unique = true)])
 data class ListeningSession(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val bookId: String, val bookTitle: String, val bookPath: String,
     val startedAt: Long, val listenedMs: Long,
+    val uuid: String = UUID.randomUUID().toString(),
 )
+
+/**
+ * The sync queue: SQL triggers (see [SYNC_TRIGGERS]) add a row for every write the server should hear about, so no
+ * call site has to remember. [tbl] is the sync kind, [key] the local book id or the row's uuid.
+ */
+@Entity
+data class PendingChange(@PrimaryKey(autoGenerate = true) val id: Long = 0, val tbl: String, val key: String, val at: Long)
+
+/** Last server seq seen per synced record ("progress:<serverId>"), sent back as `base` for conflict detection. */
+@Entity
+data class SyncSeen(@PrimaryKey val key: String, val seq: Long)

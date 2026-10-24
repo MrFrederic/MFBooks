@@ -1,0 +1,6 @@
+import '@fontsource-variable/roboto-flex/wdth.css'
+import './style.css'
+import { render } from 'preact'
+import { App } from './app'
+
+render(<App />, document.getElementById('app')!)

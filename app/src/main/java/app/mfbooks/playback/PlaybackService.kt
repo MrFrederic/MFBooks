@@ -18,6 +18,14 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import app.mfbooks.server.Live
+import app.mfbooks.server.LiveDevice
+import app.mfbooks.server.Server
+import app.mfbooks.server.Sync
+import app.mfbooks.server.str
+import app.mfbooks.server.num
+import kotlinx.serialization.json.JsonObject
 import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -91,6 +99,8 @@ class PlaybackService : MediaLibraryService() {
     private var pausedAt: Long? = null
     private var forceStopJob: Job? = null
     private var buttonsKey = ""
+    private var remote: RemotePlayer? = null
+    private var loadedRemoteBook: String? = null // local id of the book [remote] mirrors
 
     private val carObserver = Observer<Int> {
         sleep.inCar = it == CarConnection.CONNECTION_TYPE_PROJECTION || it == CarConnection.CONNECTION_TYPE_NATIVE
@@ -106,6 +116,8 @@ class PlaybackService : MediaLibraryService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .setRenderersFactory(EffectsRenderersFactory(this, effects))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(Streaming.dataSource(this)))
+            .setLoadControl(Streaming.loadControl())
             .build()
         boost.attach(exo.audioSessionId)
         // The session's player: ExoPlayer, or the Cast receiver while a Cast session runs (CastPlayer switches).
@@ -140,11 +152,21 @@ class PlaybackService : MediaLibraryService() {
         }
         car = CarConnection(this)
         car.type.observeForever(carObserver)
+        Live.onCommand = ::onLiveCommand
+        Live.onPause = { if (remote == null && pl.playWhenReady) pl.pause() }
+        scope.launch { Live.devices.collect(::onDevices) }
+        scope.launch {
+            // Now playing for the other devices every 5 s, and a sync every minute while playing (S1).
+            var n = 0
+            while (true) { delay(5_000); if (pl.isPlaying) { reportLive(); if (++n % 12 == 0) Sync.request(this@PlaybackService) } }
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession = session
 
     override fun onDestroy() {
+        Live.onCommand = null; Live.onPause = null; Live.setPlaying(false)
+        remote?.let { session.player = player; it.release(); remote = null; Live.setRemote(false) }
         saver.save(sidecar = true)
         saver.onIsPlayingChanged(false)
         car.type.removeObserver(carObserver)
@@ -174,6 +196,9 @@ class PlaybackService : MediaLibraryService() {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             saver.onIsPlayingChanged(isPlaying)
+            Live.setPlaying(isPlaying)
+            reportLive()
+            if (!isPlaying) Sync.request(this@PlaybackService)
             if (isPlaying) {
                 val h = settings.forceStopHours
                 if (h > 0 && forceStopJob?.isActive != true)
@@ -183,12 +208,14 @@ class PlaybackService : MediaLibraryService() {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             adoptIfNeeded(mediaItem)
+            reportLive()
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) saver.save()
         }
 
         override fun onPositionDiscontinuity(old: Player.PositionInfo, new: Player.PositionInfo, reason: Int) {
             if (reason != Player.DISCONTINUITY_REASON_SEEK) return
             saver.save()
+            reportLive()
             if (!pl.playWhenReady) pausedAt = null // the user chose a position while paused: don't rewind from it
         }
 
@@ -200,6 +227,8 @@ class PlaybackService : MediaLibraryService() {
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
             val id = loaded?.book?.id ?: return
             if (error.errorCode !in 2000..2999) return // PlaybackException IO errors
+            if (pl.currentMediaItem?.localConfiguration?.uri?.scheme?.startsWith("http") == true)
+                Toast.makeText(this@PlaybackService, R.string.pb_server_unreachable, Toast.LENGTH_LONG).show()
             if (System.currentTimeMillis() - lastReloadAt < 10_000) return
             lastReloadAt = System.currentTimeMillis()
             val wasPlaying = pl.playWhenReady
@@ -214,7 +243,7 @@ class PlaybackService : MediaLibraryService() {
         override fun onDeviceInfoChanged(deviceInfo: androidx.media3.common.DeviceInfo) {
             if (deviceInfo.playbackType == androidx.media3.common.DeviceInfo.PLAYBACK_TYPE_LOCAL) server.stop() // back from Cast
         }
-        override fun onPlaybackParametersChanged(p: PlaybackParameters) = updateButtons()
+        override fun onPlaybackParametersChanged(p: PlaybackParameters) { updateButtons(); reportLive() }
     }
 
     // ---- loading books -------------------------------------------------------------------------------------------
@@ -226,6 +255,7 @@ class PlaybackService : MediaLibraryService() {
         val chapters = chaptersOrTracks(bookId, dao.chapters(bookId), tracks).filter { it.trackIndex in have }
         if (chapters.isEmpty()) return null
         val bs = dao.settings(bookId)
+        if (book.serverId != null && tracks.any { it.isRemote }) scope.launch { ServerLinks.prefetch(book.serverId) }
         val spans = buildSpans(chapters, bs?.skipStartMs ?: 0, bs?.skipEndMs ?: 0)
         return LoadedBook(book, chapters, spans, bs) to buildMediaItems(book, chapters, tracks, spans)
     }
@@ -394,6 +424,7 @@ class PlaybackService : MediaLibraryService() {
     }
 
     fun exec(cmd: Command, args: Bundle = Bundle.EMPTY) {
+        remote?.let { if (remoteExec(it, cmd, args)) return }
         // Cold start: the UI shows the last book before anything is loaded, so seeks/skips must load it (paused) first.
         if (pl.mediaItemCount == 0 && cmd in needsLoadedBook) {
             scope.launch {
@@ -450,7 +481,8 @@ class PlaybackService : MediaLibraryService() {
             Command.SLEEP_CYCLE -> sleep.set(nextSleepCycle(sleep.state.value.mode))
             Command.EXIT -> { saver.save(sidecar = true); pl.pause(); sleep.set(SleepMode.Off); pauseAllPlayersAndStopSelf() }
             Command.PLAY_BOOK -> args.getString(Command.EXTRA_BOOK_ID)?.let {
-                playBook(it, args.getInt(Command.EXTRA_CHAPTER, -1).takeIf { c -> c >= 0 }, args.getBoolean(Command.EXTRA_FROM_START))
+                if (args.containsKey(Command.EXTRA_TRACK)) playAt(it, args.getInt(Command.EXTRA_TRACK), args.getLong(Command.EXTRA_MS))
+                else playBook(it, args.getInt(Command.EXTRA_CHAPTER, -1).takeIf { c -> c >= 0 }, args.getBoolean(Command.EXTRA_FROM_START))
             }
             Command.PLAY_SEARCH -> scope.launch { resolveQuery(args.getString(Command.EXTRA_QUERY).orEmpty())?.let { playBook(it.id) } }
             Command.SEEK_IN_BOOK -> loaded?.let {
@@ -499,6 +531,124 @@ class PlaybackService : MediaLibraryService() {
             } ?: return@launch
             exec(Command.JUMP_TO, Bundle().apply { putInt(Command.EXTRA_TRACK, next.trackIndex); putLong(Command.EXTRA_MS, next.positionMs) })
         }
+    }
+
+    // ---- other devices (Spotify Connect–style, see server/Live.kt and RemotePlayer) ----------------------------------
+
+    /** Plays [bookId] at a position in a track, without auto-rewind: a handoff continues exactly where the other device was. */
+    private fun playAt(bookId: String, track: Int, positionMs: Long, speed: Float? = null) = scope.launch {
+        exitRemote()
+        val r = resolve(bookId) ?: return@launch
+        val spans = pending?.spans ?: return@launch
+        pendingPausedAt = null
+        val (i, o) = locateInTrack(spans, track, positionMs)
+        pl.setMediaItems(r.mediaItems, i, o); pl.prepare(); pl.play()
+        speed?.let { setSpeed(it) }
+    }
+
+    private fun reportLive() {
+        if (remote != null) return
+        val snap = saver.snapshot() ?: return
+        val sid = snap.book.serverId ?: return
+        Live.state(sid, snap.book.title, snap.trackIndex, snap.positionInTrackMs, pl.playbackParameters.speed, pl.playWhenReady)
+    }
+
+    /** Becomes the remote control of a device that started playing while this phone is idle; stays until it leaves or we play. */
+    private fun onDevices(list: List<LiveDevice>) {
+        val me = Live.me
+        val active = list.firstOrNull { it.active && it.online && it.id != me && it.state?.bookId != null }
+        val r = remote
+        if (r != null) {
+            if (active == null || active.id != r.device.id || pl.playWhenReady) exitRemote()
+            else if (active.state?.bookId != r.bookId) { exitRemote(); onDevices(list) }
+            else r.update(active)
+            return
+        }
+        if (active != null && active.state!!.playing && !pl.playWhenReady) scope.launch {
+            val book = app.db.sync().bookByServerId(active.state.bookId!!) ?: return@launch // ponytail: books this phone doesn't know aren't mirrored
+            val (lb, items) = load(book.id) ?: return@launch
+            if (remote != null || pl.playWhenReady) return@launch
+            val rp = RemotePlayer(mainLooper, active.state.bookId, items, lb.spans, active, remoteOps(active.id),
+                settings.rewindSmallSec * 1000L, settings.fwdSmallSec * 1000L)
+            remote = rp
+            loadedRemoteBook = book.id
+            session.player = rp
+            Live.setRemote(true)
+        }
+    }
+
+    private fun exitRemote() {
+        val r = remote ?: return
+        remote = null
+        session.player = player
+        r.release()
+        Live.setRemote(false)
+    }
+
+    private fun remoteOps(target: String) = object : RemoteOps {
+        override fun command(action: String, args: Map<String, Any?>) { scope.launch {
+            Live.command(target, action, args)?.let { Toast.makeText(this@PlaybackService, it, Toast.LENGTH_SHORT).show() }
+        } }
+        override fun next() { parseAction(settings.nextAction)?.let { remoteMapped(it) } }
+        override fun previous() { parseAction(settings.prevAction)?.let { remoteMapped(it) } }
+    }
+
+    private fun remoteMapped(a: MappedAction) { remote?.let { remoteExec(it, a.command, Bundle().apply { putLong(Command.EXTRA_MS, a.ms) }) } }
+
+    /** The phone's controls while another device plays. Returns false for commands that stay local (they leave remote mode). */
+    private fun remoteExec(r: RemotePlayer, cmd: Command, args: Bundle): Boolean {
+        val ops = remoteOps(r.device.id)
+        MappedAction(cmd, args.getLong(Command.EXTRA_MS)).skipMs(settings)?.let { ops.command("skip", mapOf("ms" to it)); return true }
+        val (idx, pos) = r.position()
+        val s = r.device.state
+        when (cmd) {
+            Command.PLAY_PAUSE -> r.playWhenReady = !r.playWhenReady
+            Command.PLAY -> r.play()
+            Command.PAUSE -> r.pause()
+            Command.PREV_CHAPTER -> r.seekChapter(if (pos > 3_000 || idx == 0) idx else idx - 1, 0)
+            Command.NEXT_CHAPTER -> r.seekChapter(idx + 1, 0)
+            Command.SET_CHAPTER -> r.seekChapter(args.getInt(Command.EXTRA_CHAPTER), 0)
+            Command.SEEK_IN_BOOK -> {
+                val ch = (0 until r.mediaItemCount).lastOrNull { i -> (r.getMediaItemAt(i).mediaMetadata.extras?.getLong(ItemExtras.START_IN_BOOK) ?: 0) <= args.getLong(Command.EXTRA_MS) } ?: 0
+                r.seekChapter(ch, args.getLong(Command.EXTRA_MS) - (r.getMediaItemAt(ch).mediaMetadata.extras?.getLong(ItemExtras.START_IN_BOOK) ?: 0))
+            }
+            Command.JUMP_TO -> ops.command("seek", mapOf("trackIndex" to args.getInt(Command.EXTRA_TRACK), "positionMs" to args.getLong(Command.EXTRA_MS)))
+            Command.SET_SPEED -> ops.command("speed", mapOf("speed" to args.getFloat(Command.EXTRA_SPEED, 1f)))
+            Command.TOGGLE_SPEED -> ops.command("speed", mapOf("speed" to if ((s?.speed ?: 1f) != 1f) 1f else settings.defaultSpeed.takeIf { it != 1f } ?: 1.5f))
+            Command.CYCLE_SPEED -> ops.command("speed", mapOf("speed" to nextCycleSpeed(s?.speed ?: 1f)))
+            Command.SLEEP_ON -> ops.command("sleep", mapOf("minutes" to if (args.containsKey(Command.EXTRA_MINUTES)) args.getInt(Command.EXTRA_MINUTES) else settings.sleepMinutes))
+            Command.SLEEP_OFF -> ops.command("sleep", mapOf("minutes" to null))
+            // A chapter of the book the other device plays stays there, like every other control in remote mode.
+            Command.PLAY_BOOK -> {
+                val sameBook = args.getString(Command.EXTRA_BOOK_ID)?.let { loadedRemoteBook == it } == true
+                if (sameBook && args.getInt(Command.EXTRA_CHAPTER, -1) >= 0) r.seekChapter(args.getInt(Command.EXTRA_CHAPTER), 0)
+                else if (sameBook && !args.containsKey(Command.EXTRA_TRACK)) r.play()
+                else { ops.command("pause"); exitRemote(); return false }
+            }
+            Command.PLAY_SEARCH, Command.PREV_BOOK, Command.NEXT_BOOK, Command.EXIT -> { ops.command("pause"); exitRemote(); return false }
+            else -> Unit // EQ, boost, bookmarks… belong to this phone's own playback
+        }
+        return true
+    }
+
+    /** A command from another device (the web player): runs on this phone's own playback. */
+    private suspend fun onLiveCommand(m: JsonObject): String? {
+        val b = Bundle()
+        fun local(c: Command) { exitRemote(); exec(c, b) }
+        when (m.str("action")) {
+            "play" -> {
+                val sid = m.str("bookId") ?: return null.also { local(Command.PLAY) }
+                val book = app.db.sync().bookByServerId(sid) ?: return "That book isn't on this phone"
+                playAt(book.id, m.num("trackIndex")?.toInt() ?: 0, m.num("positionMs")?.toLong() ?: 0, m.num("speed")?.toFloat())
+            }
+            "pause" -> local(Command.PAUSE)
+            "seek" -> { b.putInt(Command.EXTRA_TRACK, m.num("trackIndex")?.toInt() ?: 0); b.putLong(Command.EXTRA_MS, m.num("positionMs")?.toLong() ?: 0); local(Command.JUMP_TO) }
+            "skip" -> { b.putLong(Command.EXTRA_MS, m.num("ms")?.toLong() ?: 0); local(Command.SEEK_BY) }
+            "speed" -> { b.putFloat(Command.EXTRA_SPEED, m.num("speed")?.toFloat() ?: 1f); local(Command.SET_SPEED) }
+            "sleep" -> m.num("minutes")?.toInt()?.let { b.putInt(Command.EXTRA_MINUTES, it); local(Command.SLEEP_ON) } ?: local(Command.SLEEP_OFF)
+            else -> return "Unknown command"
+        }
+        return null
     }
 
     // ---- media buttons (§5.5, §5.6) ------------------------------------------------------------------------------

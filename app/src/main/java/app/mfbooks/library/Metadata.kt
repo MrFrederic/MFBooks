@@ -102,13 +102,6 @@ private fun vorbis(key: String, v: String, put: (String, String?) -> Unit) {
     }
 }
 
-/** Fill gaps in this TagInfo from [o]. */
-fun TagInfo.fill(o: TagInfo?): TagInfo = if (o == null) this else TagInfo(
-    title ?: o.title, artist ?: o.artist, albumArtist ?: o.albumArtist, album ?: o.album, composer ?: o.composer,
-    narrator ?: o.narrator, year ?: o.year, genre ?: o.genre, publisher ?: o.publisher, series ?: o.series,
-    comment ?: o.comment, description ?: o.description, encoder ?: o.encoder, copyright ?: o.copyright,
-)
-
 private fun text(ctx: Context, e: DocEntry?) = e?.let { ctx.readBytes(it.uri)?.let(::decodeText) }
 
 /** Blocking: reads tags, chapters and sidecars, merges, resolves the cover. [sc] = existing .mfbooks.json (null = none/ignored). */
@@ -183,6 +176,7 @@ fun analyze(ctx: Context, c: Candidate, old: Book?, sc: JSONObject?, useCache: B
         lastPlayedAt = old?.lastPlayedAt, queuePosition = old?.queuePosition, hidden = old?.hidden ?: false,
         description = f("description", m.description), fieldSources = JSONObject(sources as Map<*, *>).toString(),
         scanSignature = c.signature(useTagTitles),
+        serverId = old?.serverId ?: sc?.optString("serverId")?.ifBlank { null },
     )
     return Scanned(book, tracks, chapters, scanned)
 }

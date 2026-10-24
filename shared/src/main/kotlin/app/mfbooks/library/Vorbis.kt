@@ -3,7 +3,7 @@ package app.mfbooks.library
 import java.io.ByteArrayOutputStream
 
 /** Vorbis comments as (KEY upper-case, value) pairs from an Ogg (Vorbis/Opus) or FLAC file; null if not those. */
-internal fun readVorbisComments(src: ByteSource, head: ByteArray): List<Pair<String, String>>? {
+fun readVorbisComments(src: ByteSource, head: ByteArray): List<Pair<String, String>>? {
     val text = String(head, 0, minOf(4, head.size), Charsets.ISO_8859_1)
     return when (text) {
         "OggS" -> oggCommentPacket(src)?.let { parseComments(it) }
@@ -79,7 +79,7 @@ private fun parseComments(b: ByteArray, prefix: Int = -1): List<Pair<String, Str
 
 private val CH_KEY = Regex("CHAPTER(\\d+)(NAME)?")
 
-internal fun vorbisChapters(c: List<Pair<String, String>>): List<RawChapter>? {
+fun vorbisChapters(c: List<Pair<String, String>>): List<RawChapter>? {
     val times = sortedMapOf<Int, Long>()
     val names = HashMap<Int, String>()
     for ((k, v) in c) {
@@ -91,7 +91,7 @@ internal fun vorbisChapters(c: List<Pair<String, String>>): List<RawChapter>? {
     return out.takeIf { it.isNotEmpty() }
 }
 
-internal fun vorbisTags(c: List<Pair<String, String>>): TagInfo? {
+fun vorbisTags(c: List<Pair<String, String>>): TagInfo? {
     fun v(vararg keys: String) = keys.firstNotNullOfOrNull { k -> c.firstOrNull { it.first == k }?.second?.trim()?.takeIf { it.isNotEmpty() } }
     return TagInfo(
         title = v("TITLE"), artist = v("ARTIST"), albumArtist = v("ALBUMARTIST", "ALBUM ARTIST"), album = v("ALBUM"),

@@ -38,11 +38,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.mfbooks.MFBooksApp
+import app.mfbooks.ui.components.formatHm
+import app.mfbooks.ui.theme.tabular
 import app.mfbooks.data.Settings
 import app.mfbooks.ui.components.Cover
-import app.mfbooks.ui.components.formatHm
+import app.mfbooks.ui.server.PlayingOnStrip
 import app.mfbooks.ui.theme.LocalGlow
-import app.mfbooks.ui.theme.tabular
 
 /**
  * Floating pill: round cover ringed by a wavy chapter-progress indicator, chapter / book, rewind · play · forward.
@@ -56,8 +57,9 @@ fun MiniPlayer(onExpand: () -> Unit, modifier: Modifier = Modifier) {
     val s by app.prefs.settings.collectAsStateWithLifecycle(Settings())
     val book = np.book ?: return
     val cs = MaterialTheme.colorScheme
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
     Surface(
-        modifier = modifier
+        modifier = Modifier
             .widthIn(max = 560.dp)
             .fillMaxWidth()
             .height(68.dp)
@@ -97,5 +99,7 @@ fun MiniPlayer(onExpand: () -> Unit, modifier: Modifier = Modifier) {
                 SeekIcon(s.fwdSmallSec, forward = true, desc = "Forward ${s.fwdSmallSec} seconds", size = 26.dp)
             }
         }
+    }
+    PlayingOnStrip(Modifier.padding(top = 6.dp))
     }
 }

@@ -100,7 +100,8 @@ class LibraryScanner(private val context: Context) {
             val ids = cands.mapTo(HashSet()) { it.id }
             val old = HashMap<String, app.mfbooks.data.Book>()
             for (r in roots) for (b in dao.booksInRoot(r.uri)) {
-                if (b.id !in ids && r.uri in okRoots) { dao.removeBook(b.id); Covers.file(context, b.id).delete() } else old[b.id] = b
+                // An offloaded book has no audio left in its folder but still streams from the server.
+                if (b.id !in ids && r.uri in okRoots && dao.tracks(b.id).none { it.isRemote }) { dao.removeBook(b.id); Covers.file(context, b.id).delete() } else old[b.id] = b
             }
 
             val tDiscovered = System.currentTimeMillis()

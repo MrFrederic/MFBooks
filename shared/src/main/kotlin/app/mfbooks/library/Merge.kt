@@ -186,10 +186,10 @@ private val NUMBERED = Regex("""^\s*(?:(?:book|vol\.?|volume|part|книга|т�
 private val SERIES_TAG = Regex("""^(.*?)[\s,:]*(?:#|(?<!\p{L})(?:book|vol\.?|volume|part|книга|том|часть)\s*)(\d+(?:\.\d+)?)\s*\)?$""", RegexOption.IGNORE_CASE)
 private val UNABRIDGED = Regex("""\s*[(\[](un)?abridged[)\]]\s*$""", RegexOption.IGNORE_CASE)
 
-internal class FolderSeries(val series: String?, val index: String?, val title: String)
+class FolderSeries(val series: String?, val index: String?, val title: String)
 
 /** "Цикл  Ведьмак/1. Последнее желание" → series "Ведьмак", index "1", title "Последнее желание". */
-internal fun folderSeries(folder: String, parent: String?): FolderSeries {
+fun folderSeries(folder: String, parent: String?): FolderSeries {
     val num = NUMBERED.matchEntire(folder)
     val series = parent?.let { p -> SERIES_WORD.find(p)?.let { p.substring(it.range.last + 1).trim() }?.takeIf { it.isNotEmpty() } }
     // ponytail: a numbered folder under a plain parent ("Author/1. Book") is not enough to call the parent a series
@@ -197,13 +197,13 @@ internal fun folderSeries(folder: String, parent: String?): FolderSeries {
 }
 
 /** "Discworld #4; Discworld: Death #1" → ("Discworld", "4"); "Foo, Book 2" → ("Foo", "2"). */
-internal fun parseSeries(s: String): Pair<String, String?>? {
+fun parseSeries(s: String): Pair<String, String?>? {
     val first = s.split(';').first().trim().takeIf { it.isNotEmpty() } ?: return null
     val m = SERIES_TAG.matchEntire(first)?.takeIf { it.groupValues[1].isNotBlank() }
     return if (m != null) m.groupValues[1].trim().trimEnd(',', ':', '-', '(').trim() to m.groupValues[2] else first to null
 }
 
-internal fun cleanTitle(s: String) = s.replace(UNABRIDGED, "").trim().ifEmpty { s }
+fun cleanTitle(s: String) = s.replace(UNABRIDGED, "").trim().ifEmpty { s }
 
 private fun norm(s: String?) = s.orEmpty().lowercase().filter { it.isLetterOrDigit() }
 private fun same(a: String?, b: String?) = norm(a).isNotEmpty() && norm(a) == norm(b)
@@ -213,7 +213,7 @@ private fun fits(a: String, b: String): Boolean {
 }
 
 /** ("Audible, Inc.", "2019") from "©2011 by Andy Weir;(P)2019 Audible, Inc."; ("Transworld Digital", null). */
-internal fun copyrightInfo(s: String): Pair<String?, String?>? {
+fun copyrightInfo(s: String): Pair<String?, String?>? {
     val parts = htmlToText(s).split(';').map { it.trim() }.filter { it.isNotEmpty() }
     val p = parts.firstOrNull { Regex("""\(P\)|℗""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
     val seg = p ?: parts.firstOrNull() ?: return null
@@ -230,7 +230,7 @@ private val ENTITIES = mapOf(
 )
 
 /** Audible/Penguin descriptions come as HTML: keep paragraphs, drop tags, decode entities. Plain text passes through. */
-internal fun htmlToText(s: String): String {
+fun htmlToText(s: String): String {
     if (!Regex("""<[a-zA-Z/][^>]*>|&#?\w+;""").containsMatchIn(s)) return s.trim()
     var t = s.replace(Regex("""(?i)<br\s*/?>"""), "\n").replace(Regex("""(?i)</(p|div|h\d|li|ul|ol)>"""), "\n\n")
         .replace(Regex("""(?i)<li[^>]*>"""), "• ").replace(Regex("""<[^>]*>"""), "")

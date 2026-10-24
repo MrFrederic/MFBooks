@@ -79,6 +79,10 @@ class PlayerConnection(private val context: Context) {
         putInt(Command.EXTRA_CHAPTER, chapterIndex ?: -1)
         putBoolean(Command.EXTRA_FROM_START, fromStart)
     })
+    /** Plays at an exact position without auto-rewind (continuing another device's book here). */
+    fun playAt(bookId: String, trackIndex: Int, positionInTrackMs: Long) = send(Command.PLAY_BOOK, Bundle().apply {
+        putString(Command.EXTRA_BOOK_ID, bookId); putInt(Command.EXTRA_TRACK, trackIndex); putLong(Command.EXTRA_MS, positionInTrackMs)
+    })
     fun playFromSearch(query: String) = send(Command.PLAY_SEARCH, Bundle().apply { putString(Command.EXTRA_QUERY, query) })
     fun playPause() = send(Command.PLAY_PAUSE)
     fun seekInChapter(ms: Long) = seekInBook((_state.value.chapter?.startInBookMs ?: 0) + ms.coerceAtLeast(0))

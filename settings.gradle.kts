@@ -6,4 +6,6 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "MFBooks"
-include(":app")
+include(":shared", ":server")
+// The server's Docker build has no Android SDK.
+if (System.getenv("MFBOOKS_SERVER_ONLY") == null) include(":app")

@@ -52,6 +52,7 @@ enum class SettingsPage(val route: String, val title: String, val icon: ImageVec
     Interruptions("interruptions", "Interruptions & headset", Icons.Rounded.Headphones, "Calls, notifications, headset connect"),
     Controls("controls", "Controls", Icons.Rounded.TouchApp, "Skip sizes, buttons, headset"),
     Sleep("sleep", "Sleep timer", Icons.Rounded.Bedtime, "Duration, fade-out, shake"),
+    Server("server", "Server", Icons.Rounded.Cloud, "Sync, cloud library, devices"),
     Appearance("appearance", "Appearance", Icons.Rounded.Palette, "Theme, colours, player layout"),
     Storage("storage", "Storage & data", Icons.Rounded.Storage, "Convert to Opus, statistics"),
     Automation("automation", "Automation", Icons.Rounded.Bolt, "Tasker actions"),
@@ -59,7 +60,7 @@ enum class SettingsPage(val route: String, val title: String, val icon: ImageVec
 
     companion object {
         fun of(route: String?) = entries.firstOrNull { it.route == route } ?: Library
-        val groups = listOf(listOf(Library, Playback, Interruptions, Controls, Sleep), listOf(Appearance, Storage, Automation, About))
+        val groups = listOf(listOf(Library, Playback, Interruptions, Controls, Sleep), listOf(Server, Appearance, Storage, Automation, About))
     }
 }
 
@@ -225,6 +226,7 @@ fun Env.sections(page: SettingsPage): List<Section> = when (page) {
             Item(c.action) { sh -> SettingRow(sh, c.name, c.action, onClick = { copy(c.action) }) }
         }, footer = "Broadcast these actions to control playback from Tasker and other apps. Tap to copy.", searchable = false),
     )
+    SettingsPage.Server -> emptyList() // its own screen (ui/server)
     SettingsPage.About -> listOf(Section(null, listOf(Item("MFBooks") { sh -> SettingRow(sh, "MFBooks", "Version $version", Icons.Rounded.Info) })))
 }
 

@@ -2,8 +2,8 @@ package app.mfbooks.library
 
 import java.io.ByteArrayOutputStream
 
-internal class Id3Frame(val id: String, val data: ByteArray)
-internal class Id3Tag(val version: Int, val frames: List<Id3Frame>)
+class Id3Frame(val id: String, val data: ByteArray)
+class Id3Tag(val version: Int, val frames: List<Id3Frame>)
 
 private fun syncsafe(b: ByteArray, p: Int) =
     ((b[p].toInt() and 0x7F) shl 21) or ((b[p + 1].toInt() and 0x7F) shl 14) or ((b[p + 2].toInt() and 0x7F) shl 7) or (b[p + 3].toInt() and 0x7F)
@@ -19,7 +19,7 @@ private fun desync(b: ByteArray): ByteArray {
     return o.toByteArray()
 }
 
-internal fun readId3(src: ByteSource): Id3Tag? {
+fun readId3(src: ByteSource): Id3Tag? {
     val h = src.read(0, 10)
     if (h.size < 10 || String(h, 0, 3, Charsets.ISO_8859_1) != "ID3") return null
     val ver = h[3].toInt()
@@ -34,7 +34,7 @@ internal fun readId3(src: ByteSource): Id3Tag? {
     return Id3Tag(ver, id3Frames(body, p, body.size, ver, tagUnsync && ver == 4))
 }
 
-internal fun id3Frames(b: ByteArray, from: Int, to: Int, ver: Int, allUnsync: Boolean = false): List<Id3Frame> {
+fun id3Frames(b: ByteArray, from: Int, to: Int, ver: Int, allUnsync: Boolean = false): List<Id3Frame> {
     val out = ArrayList<Id3Frame>()
     var p = from
     while (p + 10 <= to && b[p] != 0.toByte()) {
@@ -86,7 +86,7 @@ private fun terminator(enc: Int, b: ByteArray, from: Int, to: Int): Pair<Int, In
 }
 
 /** First value of a text frame. */
-internal fun id3Text(f: Id3Frame): String? {
+fun id3Text(f: Id3Frame): String? {
     if (f.data.size < 2) return null
     val enc = f.data[0].toInt()
     val (e, _) = terminator(enc, f.data, 1, f.data.size)
@@ -109,7 +109,7 @@ private fun comm(f: Id3Frame): String? {
     return decodeId3(enc, f.data, n, f.data.size).trim('\u0000', ' ').takeIf { it.isNotEmpty() }
 }
 
-internal fun id3Chapters(tag: Id3Tag): List<RawChapter>? {
+fun id3Chapters(tag: Id3Tag): List<RawChapter>? {
     val chaps = tag.frames.filter { it.id == "CHAP" }.mapNotNull { f ->
         val d = f.data
         val z = d.indexOf(0.toByte())
@@ -132,7 +132,7 @@ private val MARKER = Regex("<Marker>(.*?)</Marker>", setOf(RegexOption.DOT_MATCH
 private val M_NAME = Regex("<Name>(.*?)</Name>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
 private val M_TIME = Regex("<Time>(.*?)</Time>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
 
-internal fun overDriveMarkers(xml: String): List<RawChapter>? {
+fun overDriveMarkers(xml: String): List<RawChapter>? {
     val out = MARKER.findAll(xml).mapNotNull { m ->
         val name = M_NAME.find(m.groupValues[1])?.groupValues?.get(1)?.let(::unescapeXml)?.trim() ?: ""
         val time = M_TIME.find(m.groupValues[1])?.groupValues?.get(1)?.let { parseClock(it) } ?: return@mapNotNull null
@@ -141,9 +141,9 @@ internal fun overDriveMarkers(xml: String): List<RawChapter>? {
     return out.takeIf { it.isNotEmpty() }
 }
 
-internal fun unescapeXml(s: String) = s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&")
+fun unescapeXml(s: String) = s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&")
 
-internal fun id3Tags(tag: Id3Tag): TagInfo? {
+fun id3Tags(tag: Id3Tag): TagInfo? {
     val t = HashMap<String, String>()
     val comments = ArrayList<String>()
     for (f in tag.frames) when (f.id) {

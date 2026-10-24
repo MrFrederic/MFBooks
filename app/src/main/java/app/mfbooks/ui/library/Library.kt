@@ -68,9 +68,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.mfbooks.ui.components.app
+import app.mfbooks.ui.components.rememberBookItems
+import app.mfbooks.ui.theme.glowBackdrop
+import kotlinx.coroutines.launch
 import app.mfbooks.data.Book
 import app.mfbooks.data.BookState
 import app.mfbooks.data.Settings
+import app.mfbooks.server.Cloud
+import app.mfbooks.server.Server
 import app.mfbooks.ui.components.BookItem
 import app.mfbooks.ui.components.BookRow
 import app.mfbooks.ui.components.BookTile
@@ -78,16 +84,14 @@ import app.mfbooks.ui.components.EmptyPlaceholder
 import app.mfbooks.ui.components.GroupRow
 import app.mfbooks.ui.components.LocalChromePadding
 import app.mfbooks.ui.components.SettingsGroup
-import app.mfbooks.ui.components.app
-import app.mfbooks.ui.components.rememberBookItems
-import app.mfbooks.ui.theme.glowBackdrop
-import kotlinx.coroutines.launch
+import app.mfbooks.ui.server.SyncIndicator
 
 private enum class Filter(val label: String) {
-    ALL("All"), STARTED("Started"), FINISHED("Finished"), HIDDEN("Hidden");
-    /** All = not finished; Hidden books show only under Hidden. */
-    fun matches(b: Book) = if (this == HIDDEN) b.hidden else !b.hidden && when (this) {
+    ALL("All"), STARTED("Started"), FINISHED("Finished"), CLOUD("Cloud"), HIDDEN("Hidden");
+    /** All = not finished; Hidden books show only under Hidden; Cloud = has a cloud copy. */
+    fun matches(b: Book, inCloud: (Book) -> Boolean) = if (this == HIDDEN) b.hidden else !b.hidden && when (this) {
         ALL -> b.state != BookState.FINISHED
+        CLOUD -> inCloud(b)
         else -> b.state.name == name
     }
 }
@@ -105,7 +109,7 @@ private fun sorted(l: List<BookItem>, key: String): List<BookItem> = when (key) 
 }
 
 @Composable
-fun LibraryScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit) {
+fun LibraryScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit, onServer: () -> Unit = onSettings) {
     val ctx = LocalContext.current
     val app = app(ctx)
     val scope = rememberCoroutineScope()
@@ -118,8 +122,12 @@ fun LibraryScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit) {
     var sortMenu by remember { mutableStateOf(false) }
     var folderPath by rememberSaveable { mutableStateOf(listOf<String>()) }
 
+    val link by Server.link.collectAsStateWithLifecycle()
+    val cloud by Cloud.books.collectAsStateWithLifecycle()
+    val remote by Cloud.remote.collectAsStateWithLifecycle()
+    val inCloud = { b: Book -> b.id in remote || cloud[b.serverId] != null }
     val all = items.orEmpty()
-    val shown = sorted(all.filter { filter.matches(it.book) }, settings.librarySort)
+    val shown = sorted(all.filter { filter.matches(it.book, inCloud) }, settings.librarySort)
     val view = settings.libraryView
     fun setPrefs(f: (Settings) -> Settings) { scope.launch { app.prefs.update(f) } }
 
@@ -135,6 +143,7 @@ fun LibraryScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit) {
             TopAppBar(
                 title = { Text("Library", style = MaterialTheme.typography.headlineSmallEmphasized) },
                 actions = {
+                    SyncIndicator(onServer)
                     Box {
                         IconButton({ sortMenu = true }) { Icon(Icons.AutoMirrored.Rounded.Sort, "Sort") }
                         DropdownMenu(sortMenu, { sortMenu = false }, shape = RoundedCornerShape(20.dp)) {
@@ -159,8 +168,8 @@ fun LibraryScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit) {
             )
             val anyHidden = all.any { it.book.hidden }
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Filter.entries.filter { it != Filter.HIDDEN || anyHidden || filter == Filter.HIDDEN }.forEach {
-                    val count = all.count { b -> it.matches(b.book) }
+                Filter.entries.filter { (it != Filter.HIDDEN || anyHidden || filter == Filter.HIDDEN) && (it != Filter.CLOUD || link != null || filter == Filter.CLOUD) }.forEach {
+                    val count = all.count { b -> it.matches(b.book, inCloud) }
                     FilterChip(filter == it, { filter = it; folderPath = emptyList() }, { Text("${it.label}  $count") },
                         shape = CircleShape, modifier = Modifier.animateContentSize(),
                         leadingIcon = if (filter == it) { { Icon(Icons.Rounded.Check, null, Modifier.size(18.dp)) } } else null)

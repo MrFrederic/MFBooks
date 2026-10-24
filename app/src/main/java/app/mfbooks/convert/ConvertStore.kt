@@ -44,24 +44,9 @@ class ConvertStore(private val context: Context) {
     suspend fun thresholdNow() = batteryThreshold.first()
 }
 
-/** §4.6 eligibility, widened to AAC: MP3 or AAC-in-MP4 above 50 kb/s. Opus/Vorbis/FLAC/etc. are never touched. */
-object Eligibility {
-    val EXTENSIONS = setOf("mp3", "m4a", "m4b", "mp4", "aac")
-    const val MIN_KBPS = 50
+fun Eligibility.isEligible(t: Track) = isEligible(t.fileName, t.sizeBytes, t.durationMs)
 
-    /** Average bitrate from size and duration (bits/ms == kb/s). Embedded art inflates it a little; fine for a > 50 cut-off. */
-    fun kbps(sizeBytes: Long, durationMs: Long) = if (durationMs > 0) sizeBytes * 8 / durationMs else 0
-
-    fun isEligible(fileName: String, sizeBytes: Long, durationMs: Long) =
-        fileName.substringAfterLast('.', "").lowercase() in EXTENSIONS && kbps(sizeBytes, durationMs) > MIN_KBPS
-
-    fun isEligible(t: Track) = isEligible(t.fileName, t.sizeBytes, t.durationMs)
-
-    /** Opus at 32 kb/s ≈ 4 kB/s plus ~2 % Ogg framing. */
-    fun estimatedOutBytes(durationMs: Long) = durationMs * (OpusTranscoder.BITRATE / 8) / 1000 * 102 / 100
-
-    fun estimatedSaving(t: Track) = (t.sizeBytes - estimatedOutBytes(t.durationMs)).coerceAtLeast(0)
-}
+fun Eligibility.estimatedSaving(t: Track) = (t.sizeBytes - estimatedOutBytes(t.durationMs)).coerceAtLeast(0)
 
 fun formatBytes(b: Long): String = when {
     b >= 1L shl 30 -> "%.1f GB".format(b / (1L shl 30).toDouble())

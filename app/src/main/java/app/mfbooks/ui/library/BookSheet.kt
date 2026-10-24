@@ -33,14 +33,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.mfbooks.data.Book
-import app.mfbooks.data.BookState
-import app.mfbooks.ui.components.BookCover
-import app.mfbooks.ui.components.GroupRow
-import app.mfbooks.ui.components.SettingsGroup
 import app.mfbooks.ui.components.app
 import app.mfbooks.ui.components.formatHm
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.Download
+import app.mfbooks.data.Book
+import app.mfbooks.data.BookState
+import app.mfbooks.server.Transfer
+import app.mfbooks.ui.components.BookCover
+import app.mfbooks.ui.components.GroupRow
+import app.mfbooks.ui.components.SettingsGroup
+import app.mfbooks.ui.server.Where
+import app.mfbooks.ui.server.whereIs
 
 /** Long-press sheet (§7.3). ponytail: queue / cover / edit / delete actions omitted for now. */
 @Composable
@@ -79,6 +84,7 @@ fun BookActionsSheet(book: Book, startInfo: Boolean = false, onDismiss: () -> Un
                         GroupRow(if (book.hidden) "Unhide" else "Hide", icon = if (book.hidden) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
                             onClick = { act { dao.setHidden(book.id, !book.hidden) } }),
                         GroupRow("Book info", icon = Icons.Rounded.Info, onClick = { info = true }),
+                        *cloudRows(book, onDismiss).toTypedArray(),
                     ), Modifier.padding(top = 8.dp))
                 } else {
                     Column {
@@ -97,5 +103,19 @@ fun BookActionsSheet(book: Book, startInfo: Boolean = false, onDismiss: () -> Un
                 }
             }
         }
+    }
+}
+
+/** Upload / download from the long-press menu (U1, O3) once a server is linked. */
+@Composable
+private fun cloudRows(book: Book, onDismiss: () -> Unit): List<GroupRow> {
+    val ctx = LocalContext.current
+    return when (whereIs(book)) {
+        null -> emptyList()
+        Where.CLOUD -> listOf(GroupRow("Download to this phone", icon = Icons.Rounded.Download,
+            onClick = { Transfer.download(ctx, book.id); onDismiss() }))
+        Where.PHONE -> listOf(GroupRow("Upload to the cloud", icon = Icons.Rounded.CloudUpload,
+            onClick = { Transfer.uploadBooks(ctx, listOf(book.id)); onDismiss() }))
+        Where.BOTH -> emptyList()
     }
 }

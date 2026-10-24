@@ -17,6 +17,7 @@ A local-files audiobook player for Android, built with Jetpack Compose (Material
 - Convert books to Opus to save space
 - Imports progress and history from Smart AudioBook Player
 - No account, no ads, no analytics
+- Optional [self-hosted server](server/README.md): sync, cloud library and a web player with phone/PC handoff
 
 ## Install
 
@@ -27,3 +28,7 @@ Download the APK from [Releases](../../releases/latest). Requires Android 10+.
 ```bash
 ./gradlew :app:assembleDebug
 ```
+
+## License
+
+MIT

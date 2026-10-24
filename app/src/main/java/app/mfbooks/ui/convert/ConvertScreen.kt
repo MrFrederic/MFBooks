@@ -74,6 +74,8 @@ import androidx.work.WorkManager
 import app.mfbooks.convert.ConvertStore
 import app.mfbooks.convert.ConvertWorker
 import app.mfbooks.convert.Eligibility
+import app.mfbooks.convert.estimatedSaving
+import app.mfbooks.convert.isEligible
 import app.mfbooks.convert.formatBytes
 import app.mfbooks.data.Book
 import app.mfbooks.data.Settings

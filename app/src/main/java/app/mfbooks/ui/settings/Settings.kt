@@ -76,7 +76,7 @@ private fun SettingsHost(navigate: (String) -> Unit, content: @Composable (Env) 
 }
 
 @Composable
-private fun SettingsScaffold(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+internal fun SettingsScaffold(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Box(Modifier.fillMaxSize().glowBackdrop(0.5f).nestedScroll(scroll.nestedScrollConnection)) {
         Column(Modifier.fillMaxSize()) {
@@ -130,5 +130,6 @@ fun SettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) = SettingsH
 @Composable
 fun SettingsPageScreen(route: String?, onBack: () -> Unit, onNavigate: (String) -> Unit) = SettingsHost(onNavigate) { env ->
     val page = SettingsPage.of(route)
-    SettingsScaffold(page.title, onBack) { env.sections(page).forEach { SectionCard(it) } }
+    if (page == SettingsPage.Server) app.mfbooks.ui.server.ServerScreen(onBack, onNavigate)
+    else SettingsScaffold(page.title, onBack) { env.sections(page).forEach { SectionCard(it) } }
 }

@@ -12,6 +12,8 @@ coil = "3.6.3"
 materialKolor = "5.0.1"
 carApp = "1.7.0"
 chardet = "2.5.1"
+ktor = "3.6.0"
+serialization = "1.12.0"
 
 [libraries]
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -39,8 +41,26 @@ car-app = { group = "androidx.car.app", name = "app", version.ref = "carApp" }
 juniversalchardet = { group = "com.github.albfernandez", name = "juniversalchardet", version.ref = "chardet" }
 junit = { group = "junit", name = "junit", version = "4.13.2" }
 json = { group = "org.json", name = "json", version = "20250517" }
+serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref = "ktor" }
+ktor-server-cio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
+ktor-server-content-negotiation = { group = "io.ktor", name = "ktor-server-content-negotiation", version.ref = "ktor" }
+ktor-server-websockets = { group = "io.ktor", name = "ktor-server-websockets", version.ref = "ktor" }
+ktor-server-partial-content = { group = "io.ktor", name = "ktor-server-partial-content", version.ref = "ktor" }
+ktor-server-auto-head-response = { group = "io.ktor", name = "ktor-server-auto-head-response", version.ref = "ktor" }
+ktor-server-status-pages = { group = "io.ktor", name = "ktor-server-status-pages", version.ref = "ktor" }
+ktor-server-forwarded-header = { group = "io.ktor", name = "ktor-server-forwarded-header", version.ref = "ktor" }
+ktor-serialization-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-server-test-host = { group = "io.ktor", name = "ktor-server-test-host", version.ref = "ktor" }
+ktor-client-websockets = { group = "io.ktor", name = "ktor-client-websockets", version.ref = "ktor" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version = "5.5.1" }
+sqlite-jdbc = { group = "org.xerial", name = "sqlite-jdbc", version = "3.53.4.0" }
+bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version = "1.86" }
+logback = { group = "ch.qos.logback", name = "logback-classic", version = "1.6.5" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

@@ -24,6 +24,7 @@ enum class ProgressFormat { TIME, TIME_PERCENT, TIME_LEFT, TIME_PERCENT_LEFT, FI
  * Next/previous mapping for external surfaces (§5.6). Values are command names from [app.mfbooks.playback.Commands]
  * with an optional seconds argument, e.g. "FWD:30", "REWIND:30", "NEXT_CHAPTER", "PREV_BOOK".
  */
+@kotlinx.serialization.Serializable
 data class Settings(
     val autoRewind: AutoRewind = AutoRewind.AUTO,
     val defaultSpeed: Float = 1.0f,
@@ -106,8 +107,13 @@ class Prefs(private val context: Context) {
     suspend fun now(): Settings = settings.first()
 
     /** `prefs.update { it.copy(theme = ThemeMode.DARK) }` */
-    suspend fun update(f: (Settings) -> Settings) {
-        context.dataStore.edit { p -> p.write(f(p.toSettings())) }
+    suspend fun update(f: (Settings) -> Settings) = update(true, f)
+
+    /** [sync] = false for values that came from the server, so they don't echo back. */
+    suspend fun update(sync: Boolean, f: (Settings) -> Settings) {
+        var changed = false
+        context.dataStore.edit { p -> val old = p.toSettings(); val new = f(old); changed = new != old; p.write(new) }
+        if (changed && sync) app.mfbooks.server.Sync.settingsChanged(context)
     }
 
     private inline fun <reified E : Enum<E>> Preferences.enum(k: Preferences.Key<String>, d: E): E =

@@ -1,6 +1,6 @@
 package app.mfbooks.library
 
-internal class Box(val type: String, val start: Int, val end: Int)
+class Box(val type: String, val start: Int, val end: Int)
 
 private fun boxes(b: ByteArray, from: Int, to: Int): List<Box> {
     val out = ArrayList<Box>()
@@ -29,7 +29,7 @@ private fun Box.child(b: ByteArray, vararg path: String): Box? {
 }
 
 /** Reads the whole `moov` box (never the media data). */
-internal fun readMoov(src: ByteSource): ByteArray? {
+fun readMoov(src: ByteSource): ByteArray? {
     var off = 0L
     while (off + 8 <= src.size) {
         val h = src.read(off, 16)
@@ -47,11 +47,11 @@ internal fun readMoov(src: ByteSource): ByteArray? {
     return null
 }
 
-internal fun isMp4(head: ByteArray) = head.size >= 8 && String(head, 4, 4, Charsets.ISO_8859_1).let { it == "ftyp" || it == "moov" || it == "mdat" || it == "free" }
+fun isMp4(head: ByteArray) = head.size >= 8 && String(head, 4, 4, Charsets.ISO_8859_1).let { it == "ftyp" || it == "moov" || it == "mdat" || it == "free" }
 
-internal fun mp4Chapters(src: ByteSource): List<RawChapter>? = readMoov(src)?.let { mp4Chapters(src, it) }
+fun mp4Chapters(src: ByteSource): List<RawChapter>? = readMoov(src)?.let { mp4Chapters(src, it) }
 
-internal fun mp4Chapters(src: ByteSource, moov: ByteArray): List<RawChapter>? {
+fun mp4Chapters(src: ByteSource, moov: ByteArray): List<RawChapter>? {
     val root = Box("moov", 0, moov.size)
     root.child(moov, "udta", "chpl")?.let { chpl ->
         var p = chpl.start
@@ -140,9 +140,9 @@ private fun qtTextChapters(src: ByteSource, m: ByteArray, root: Box): List<RawCh
     return out.takeIf { it.isNotEmpty() }
 }
 
-internal fun mp4Tags(src: ByteSource): TagInfo? = readMoov(src)?.let(::mp4Tags)
+fun mp4Tags(src: ByteSource): TagInfo? = readMoov(src)?.let(::mp4Tags)
 
-internal fun mp4Tags(m: ByteArray): TagInfo? {
+fun mp4Tags(m: ByteArray): TagInfo? {
     val meta = Box("moov", 0, m.size).child(m, "udta", "meta") ?: return null
     // ISO `meta` is a full box (4 version bytes); the QuickTime variant starts with `hdlr` directly.
     val from = meta.start + if (meta.end - meta.start >= 8 && String(m, meta.start + 4, 4, Charsets.ISO_8859_1) == "hdlr") 0 else 4

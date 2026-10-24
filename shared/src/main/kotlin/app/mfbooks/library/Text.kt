@@ -60,11 +60,11 @@ fun rankCoverCandidates(imageNames: List<String>, audioBaseNames: List<String>, 
         .sortedBy { rank(it) } // stable
 }
 
-internal fun extOf(name: String) = name.substringAfterLast('.', "").lowercase()
-internal fun baseName(name: String) = if (name.contains('.')) name.substringBeforeLast('.') else name
+fun extOf(name: String) = name.substringAfterLast('.', "").lowercase()
+fun baseName(name: String) = if (name.contains('.')) name.substringBeforeLast('.') else name
 
 /** "h:mm:ss.fff", "mm:ss.fff", "ss.fff" (also comma decimals) → ms. */
-internal fun parseClock(s: String): Long? {
+fun parseClock(s: String): Long? {
     val parts = s.trim().replace(',', '.').split(':')
     if (parts.size !in 1..3 || parts.any { it.isBlank() }) return null
     var total = 0.0
@@ -72,9 +72,9 @@ internal fun parseClock(s: String): Long? {
     return Math.round(total * 1000)
 }
 
-internal fun be16(b: ByteArray, p: Int) = ((b[p].toInt() and 0xFF) shl 8) or (b[p + 1].toInt() and 0xFF)
-internal fun be32(b: ByteArray, p: Int): Long =
+fun be16(b: ByteArray, p: Int) = ((b[p].toInt() and 0xFF) shl 8) or (b[p + 1].toInt() and 0xFF)
+fun be32(b: ByteArray, p: Int): Long =
     ((b[p].toLong() and 0xFF) shl 24) or ((b[p + 1].toLong() and 0xFF) shl 16) or ((b[p + 2].toLong() and 0xFF) shl 8) or (b[p + 3].toLong() and 0xFF)
-internal fun be64(b: ByteArray, p: Int) = (be32(b, p) shl 32) or be32(b, p + 4)
-internal fun le32(b: ByteArray, p: Int): Long =
+fun be64(b: ByteArray, p: Int) = (be32(b, p) shl 32) or be32(b, p + 4)
+fun le32(b: ByteArray, p: Int): Long =
     ((b[p + 3].toLong() and 0xFF) shl 24) or ((b[p + 2].toLong() and 0xFF) shl 16) or ((b[p + 1].toLong() and 0xFF) shl 8) or (b[p].toLong() and 0xFF)

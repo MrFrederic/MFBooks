@@ -43,7 +43,7 @@ class SourceInfo(val mime: String, val durationMs: Long, val channels: Int, val 
  * stopped by the system, FGS timeout) only redoes the unfinished ones. The Ogg file is written at the end.
  */
 object OpusTranscoder {
-    const val BITRATE = 32_000
+    const val BITRATE = Eligibility.BITRATE
     private const val RATE = 48_000
     private const val FRAME = 960                      // the encoder's default 20 ms packet
     private const val WARMUP = 50L * FRAME            // 1 s of encoder history before a splice, discarded

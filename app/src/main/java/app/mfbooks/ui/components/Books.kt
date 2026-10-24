@@ -43,11 +43,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.mfbooks.MFBooksApp
-import app.mfbooks.data.Book
-import app.mfbooks.data.BookState
 import app.mfbooks.ui.theme.tabular
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.combine
+import app.mfbooks.data.Book
+import app.mfbooks.data.BookState
+import app.mfbooks.ui.server.CloudBadge
 
 /** A book plus listened position, for lists. */
 @Stable
@@ -112,6 +113,7 @@ fun BookTile(item: BookItem, onClick: () -> Unit, onLongClick: () -> Unit, modif
                     Modifier.align(Alignment.TopEnd).padding(8.dp).background(MaterialTheme.colorScheme.surface, CircleShape),
                     tint = MaterialTheme.colorScheme.primary)
             }
+            CloudBadge(b, Modifier.align(Alignment.TopStart).padding(8.dp))
             if (b.state == BookState.STARTED) {
                 LinearProgressIndicator({ item.fraction }, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).height(5.dp),
                     trackColor = Color.Black.copy(alpha = 0.35f), drawStopIndicator = {})
@@ -132,6 +134,7 @@ fun BookRow(item: BookItem, onClick: () -> Unit, onLongClick: () -> Unit, modifi
         .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
             BookCover(b, Modifier.size(60.dp), corner = 14.dp)
+            CloudBadge(b, Modifier.align(Alignment.BottomEnd).padding(2.dp))
             if (playing) Box(Modifier.matchParentSize().clip(RoundedCornerShape(14.dp)).background(Color.Black.copy(alpha = 0.45f)), Alignment.Center) {
                 PlayingBars(true, color = Color.White)
             }
