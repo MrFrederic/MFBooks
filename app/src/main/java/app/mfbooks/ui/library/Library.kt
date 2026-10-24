@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.mfbooks.data.Book
+import app.mfbooks.data.BookState
 import app.mfbooks.data.Settings
 import app.mfbooks.ui.components.BookItem
 import app.mfbooks.ui.components.BookRow
@@ -82,7 +83,14 @@ import app.mfbooks.ui.components.rememberBookItems
 import app.mfbooks.ui.theme.glowBackdrop
 import kotlinx.coroutines.launch
 
-private enum class Filter(val label: String) { ALL("All"), NEW("New"), STARTED("Started"), FINISHED("Finished"), HIDDEN("Hidden") }
+private enum class Filter(val label: String) {
+    ALL("All"), STARTED("Started"), FINISHED("Finished"), HIDDEN("Hidden");
+    /** All = not finished; Hidden books show only under Hidden. */
+    fun matches(b: Book) = if (this == HIDDEN) b.hidden else !b.hidden && when (this) {
+        ALL -> b.state != BookState.FINISHED
+        else -> b.state.name == name
+    }
+}
 
 private val sorts = listOf("TITLE" to "Title", "AUTHOR" to "Author", "RECENT" to "Recently played",
     "ADDED" to "Date added", "LENGTH" to "Length", "PATH" to "Path")
@@ -111,12 +119,7 @@ fun LibraryScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit) {
     var folderPath by rememberSaveable { mutableStateOf(listOf<String>()) }
 
     val all = items.orEmpty()
-    val shown = sorted(all.filter {
-        when (filter) {
-            Filter.HIDDEN -> it.book.hidden
-            else -> !it.book.hidden && (filter == Filter.ALL || it.book.state.name == filter.name)
-        }
-    }, settings.librarySort)
+    val shown = sorted(all.filter { filter.matches(it.book) }, settings.librarySort)
     val view = settings.libraryView
     fun setPrefs(f: (Settings) -> Settings) { scope.launch { app.prefs.update(f) } }
 
@@ -157,7 +160,7 @@ fun LibraryScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit) {
             val anyHidden = all.any { it.book.hidden }
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Filter.entries.filter { it != Filter.HIDDEN || anyHidden || filter == Filter.HIDDEN }.forEach {
-                    val count = all.count { b -> if (it == Filter.HIDDEN) b.book.hidden else !b.book.hidden && (it == Filter.ALL || b.book.state.name == it.name) }
+                    val count = all.count { b -> it.matches(b.book) }
                     FilterChip(filter == it, { filter = it; folderPath = emptyList() }, { Text("${it.label}  $count") },
                         shape = CircleShape, modifier = Modifier.animateContentSize(),
                         leadingIcon = if (filter == it) { { Icon(Icons.Rounded.Check, null, Modifier.size(18.dp)) } } else null)

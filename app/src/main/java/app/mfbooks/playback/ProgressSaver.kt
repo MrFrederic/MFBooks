@@ -69,6 +69,7 @@ class ProgressSaver(private val context: Context, private val player: Player, pr
         val playing = player.isPlaying
         val newState = when {
             finished -> BookState.FINISHED
+            snap.book.state != BookState.FINISHED && playing && snap.positionInBookMs >= snap.book.durationMs - 30_000 -> BookState.FINISHED
             snap.book.state == BookState.NEW && snap.positionInBookMs > 10_000 && playing -> BookState.STARTED
             snap.book.state == BookState.FINISHED && playing && !finished && snap.positionInBookMs < snap.book.durationMs - 60_000 -> BookState.STARTED
             else -> snap.book.state
