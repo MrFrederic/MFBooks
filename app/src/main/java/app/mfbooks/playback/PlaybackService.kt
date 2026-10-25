@@ -65,6 +65,9 @@ object SessionExtras {
     const val BOOST_MB = "mfbooks.boostMb"
 }
 
+/** [Live.command] errors that mean the other device can't hear us at all. */
+private val UNREACHABLE = setOf("offline", "The device didn't answer", "Not connected to the server")
+
 /** One MediaLibrarySession for the phone UI, notification, Bluetooth, Wear and Android Auto (§3.3, §5, §6). */
 class PlaybackService : MediaLibraryService() {
     private val app by lazy { MFBooksApp.get(this) }
@@ -544,14 +547,28 @@ class PlaybackService : MediaLibraryService() {
     // ---- other devices (Spotify Connect–style, see server/Live.kt and RemotePlayer) ----------------------------------
 
     /** Plays [bookId] at a position in a track, without auto-rewind: a handoff continues exactly where the other device was. */
-    private fun playAt(bookId: String, track: Int, positionMs: Long, speed: Float? = null) = scope.launch {
+    private fun playAt(bookId: String, track: Int, positionMs: Long, speed: Float? = null, play: Boolean = true) = scope.launch {
         exitRemote()
         val r = resolve(bookId) ?: return@launch
         val spans = pending?.spans ?: return@launch
         pendingPausedAt = null
         val (i, o) = locateInTrack(spans, track, positionMs)
-        pl.setMediaItems(r.mediaItems, i, o); pl.prepare(); pl.play()
+        pl.setMediaItems(r.mediaItems, i, o); pl.prepare()
+        if (play) pl.play()
         speed?.let { setSpeed(it) }
+    }
+
+    /**
+     * The device we control is gone (switched off, out of Wi-Fi): continue the book here from where it last was, playing
+     * if the owner just pressed play, else paused and ready, so the phone never stays a remote for nothing.
+     */
+    private fun takeBack(r: RemotePlayer, play: Boolean) {
+        val st = r.device.state
+        Live.giveUp(r.device.id)
+        android.util.Log.i("Live", "${r.device.name} is gone; continuing here at track ${st?.trackIndex} ${st?.positionMs} ms (play=$play)")
+        exitRemote()
+        if (st == null) return
+        scope.launch { app.db.sync().bookByServerId(r.bookId)?.let { playAt(it.id, st.trackIndex, st.positionMs, st.speed, play) } }
     }
 
     private fun reportLive() {
@@ -567,12 +584,13 @@ class PlaybackService : MediaLibraryService() {
         val active = list.firstOrNull { it.active && it.online && it.id != me && it.state?.bookId != null }
         val r = remote
         if (r != null) {
-            if (active == null || active.id != r.device.id || pl.playWhenReady) exitRemote()
+            if (pl.playWhenReady) exitRemote()
+            else if (active == null || active.id != r.device.id) takeBack(r, play = false)
             else if (active.state?.bookId != r.bookId) { exitRemote(); onDevices(list) }
             else r.update(active)
             return
         }
-        if (active != null && active.state!!.playing && !pl.playWhenReady) scope.launch {
+        if (active != null && active.state!!.playing && !pl.playWhenReady && !Live.isSilent(active)) scope.launch {
             val book = app.db.sync().bookByServerId(active.state.bookId!!) ?: return@launch // ponytail: books this phone doesn't know aren't mirrored
             val (lb, items) = load(book.id) ?: return@launch
             if (remote != null || pl.playWhenReady) return@launch
@@ -595,7 +613,12 @@ class PlaybackService : MediaLibraryService() {
 
     private fun remoteOps(target: String) = object : RemoteOps {
         override fun command(action: String, args: Map<String, Any?>) { scope.launch {
-            Live.command(target, action, args)?.let { Toast.makeText(this@PlaybackService, it, Toast.LENGTH_SHORT).show() }
+            val err = Live.command(target, action, args) ?: return@launch
+            val r = remote?.takeIf { it.device.id == target }
+            if (r != null && err in UNREACHABLE) {
+                Toast.makeText(this@PlaybackService, "${r.device.name} isn't reachable. " + if (action == "play") "Playing on this phone." else "Back on this phone.", Toast.LENGTH_SHORT).show()
+                takeBack(r, play = action == "play")
+            } else Toast.makeText(this@PlaybackService, err, Toast.LENGTH_SHORT).show()
         } }
         override fun next() { parseAction(settings.nextAction)?.let { remoteMapped(it) } }
         override fun previous() { parseAction(settings.prevAction)?.let { remoteMapped(it) } }

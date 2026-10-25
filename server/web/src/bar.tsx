@@ -5,7 +5,7 @@ import { coverUrl, fmtDuration, fmtTime, playable, toast } from './api'
 import { Icon, SkipIcon } from './icons'
 import { cmd, devices, type LiveDevice } from './live'
 import {
-  boostMb, book, chapterAt, chaptersOf, ctl, eq, moveTo, myId, remote, setBoost, setEq, skipBackSec, skipFwdSec,
+  boostMb, book, buffering, chapterAt, chaptersOf, ctl, eq, moveTo, myId, remote, setBoost, setEq, skipBackSec, skipFwdSec,
   sleep, view, volume,
 } from './player'
 import { serverNow } from './sync'
@@ -35,7 +35,8 @@ function Transport({ big }: { big?: boolean }) {
     <div class={`transport ${big ? 'big' : ''}`}>
       <button class="icon-btn" disabled={none} title={`Back ${skipBackSec.value} seconds`} aria-label={`Back ${skipBackSec.value} seconds`} onClick={() => ctl.skip(-skipBackSec.value * 1000)}><SkipIcon dir="back" sec={skipBackSec.value} size={s} /></button>
       <button class="icon-btn" disabled={none} title="Previous chapter" aria-label="Previous chapter" onClick={() => ctl.chapter(-1)}><Icon name="prev" size={s} /></button>
-      <button class={`play ${v.playing ? 'playing' : ''}`} disabled={none} aria-label={v.playing ? 'Pause' : 'Play'} onClick={ctl.toggle}>
+      <button class={`play ${v.playing ? 'playing' : ''} ${v.playing && !v.remote && buffering.value ? 'loading' : ''}`} disabled={none}
+        aria-label={v.playing ? (buffering.value && !v.remote ? 'Loading, click to pause' : 'Pause') : 'Play'} onClick={ctl.toggle}>
         <Icon name={v.playing ? 'pause' : 'play'} size={big ? 36 : 26} />
       </button>
       <button class="icon-btn" disabled={none} title="Next chapter" aria-label="Next chapter" onClick={() => ctl.chapter(1)}><Icon name="next" size={s} /></button>

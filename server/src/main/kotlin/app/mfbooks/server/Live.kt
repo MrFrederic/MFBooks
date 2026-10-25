@@ -10,7 +10,9 @@ import io.ktor.websocket.readText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -42,8 +44,16 @@ class Live(private val app: App) {
             while (isActive) {
                 delay(5_000)
                 val now = System.currentTimeMillis()
-                peers.values.filter { it.sessions.isNotEmpty() && now - it.lastFrame > STALE_MS }
-                    .forEach { p -> p.sessions.forEach { s -> launch { runCatching { s.close(CloseReason(CloseReason.Codes.GOING_AWAY, "No heartbeat")) } } } }
+                // A device that went silent (switched off, lost Wi-Fi) is gone now, not when its dead TCP connection times
+                // out minutes later: otherwise it stays "active" and every other device keeps sending it commands.
+                val gone = peers.values.filter { it.sessions.isNotEmpty() && now - it.lastFrame > STALE_MS }
+                for (p in gone) {
+                    val sessions = p.sessions.toList()
+                    p.sessions.clear(); p.state = null
+                    if (active == p.id) active = null
+                    sessions.forEach { s -> launch { runCatching { withTimeout(5_000) { s.close(CloseReason(CloseReason.Codes.GOING_AWAY, "No heartbeat")) } }; s.cancel() } }
+                }
+                if (gone.isNotEmpty()) broadcastDevices()
                 pending.entries.removeIf { now - it.value.second > 60_000 }
             }
         }
@@ -62,6 +72,8 @@ class Live(private val app: App) {
                 val m = runCatching { Json.parseToJsonElement(f.readText()).jsonObject }.getOrNull() ?: continue
                 onFrame(p, m)
             }
+        } catch (e: java.io.IOException) {
+            // Ping timeout or a dropped connection (sleeping laptop, background tab): a normal way for a device to leave.
         } finally {
             p.sessions -= session
             if (p.sessions.isEmpty()) { p.state = null; if (active == p.id) active = null }

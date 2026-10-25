@@ -201,8 +201,9 @@ audio.addEventListener('ended', () => {
     setTrack(track.value + 1, 0) // still `playing`, so this starts the next file
   }
 })
-audio.addEventListener('waiting', () => (buffering.value = true))
-audio.addEventListener('playing', () => (buffering.value = false))
+// Other devices extrapolate our position while we say "playing", so loading is reported as not playing (see stateMsg).
+audio.addEventListener('waiting', () => { buffering.value = true; sendState() })
+audio.addEventListener('playing', () => { buffering.value = false; stall = { at: audio.currentTime, since: Date.now(), tries: 0 }; sendState() })
 audio.addEventListener('ratechange', () => sendState())
 audio.addEventListener('error', () => {
   if (!audio.src) return
@@ -215,6 +216,7 @@ export async function play() {
   if (!book.value) return
   ensureGraph()
   playing.value = true
+  buffering.value = audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
   try {
     await audio.play()
     await checkSound()
@@ -424,7 +426,7 @@ function stateMsg() {
   if (!d) return { t: 'ping' }
   return {
     t: 'state', bookId: d.id, title: d.title, trackIndex: track.value, positionMs: Math.round(curPos()),
-    speed: speed.value, playing: playing.value, sleepAt: sleepAtServer(), volume: volume.value,
+    speed: speed.value, playing: playing.value && !buffering.value, sleepAt: sleepAtServer(), volume: volume.value,
   }
 }
 function sendState() { send(stateMsg()) }
@@ -535,6 +537,22 @@ export async function moveTo(target: LiveDevice | 'here') {
   }
 }
 
+// ---- Stalls: a media fetch that hangs (slow uplink, a proxy dropping a range request) never recovers on its own ----
+
+/** Last position the element moved to, and when; reloading the file at that position restarts the fetch. */
+let stall = { at: 0, since: Date.now(), tries: 0 }
+function watchStall() {
+  if (!playing.value || audio.ended || audio.seeking) { stall = { at: audio.currentTime, since: Date.now(), tries: 0 }; return }
+  if (audio.currentTime !== stall.at) { stall = { at: audio.currentTime, since: Date.now(), tries: 0 }; return }
+  const wait = [8_000, 15_000, 30_000][Math.min(stall.tries, 2)]!
+  if (Date.now() - stall.since < wait) return
+  if (stall.tries === 0) toast('Still loading from the server. Retrying…')
+  stall = { at: audio.currentTime, since: Date.now(), tries: stall.tries + 1 }
+  const at = curPos()
+  loadedKey = '' // forces a fresh request for the same file
+  setTrack(track.value, at)
+}
+
 // ---- Engine loop: position, finish mark, sleep fade, periodic progress ----
 
 setInterval(() => {
@@ -542,6 +560,7 @@ setInterval(() => {
   const d = book.value
   if (!d) return
   if (pendingSeek == null && !audio.seeking) pos.value = audio.currentTime * 1000
+  watchStall()
   if (!playing.value) return
   const bms = localBookMs()
   if (d.state !== 'FINISHED' && bms >= d.durationMs - 30_000) {

@@ -208,7 +208,8 @@ fun BookCloudPanel(book: Book, modifier: Modifier = Modifier) {
 @Composable
 fun rememberRemoteActive(): LiveDevice? {
     val devices by Live.devices.collectAsStateWithLifecycle()
-    return devices.firstOrNull { it.active && it.online && it.id != Live.me && it.state != null }
+    Live.silenced.collectAsStateWithLifecycle().value // recompose when we give up on a device
+    return devices.firstOrNull { it.active && it.online && it.id != Live.me && it.state != null && !Live.isSilent(it) }
 }
 
 /** "Playing on Living room PC" under the player, like Spotify's green bar (W4). Tap opens the device picker. */
@@ -241,7 +242,7 @@ fun ConnectSheet(onDismiss: () -> Unit) {
     val devices by Live.devices.collectAsStateWithLifecycle()
     val np by app.player.state.collectAsStateWithLifecycle()
     val me = Live.me
-    val remote = devices.firstOrNull { it.active && it.online && it.id != me && it.state != null }
+    val remote = devices.firstOrNull { it.active && it.online && it.id != me && it.state != null && !Live.isSilent(it) }
     val others = devices.filter { it.online && it.id != me && it.id != remote?.id }
 
     /** What plays now, as a track position: the remote device's, or this phone's. */
@@ -262,7 +263,7 @@ fun ConnectSheet(onDismiss: () -> Unit) {
         val r = remote ?: return@launch
         val s = r.state ?: return@launch
         val book = s.bookId?.let { app.db.sync().bookByServerId(it) } ?: return@launch snackbar.showSnackbar("That book isn't on this phone").let {}
-        Live.command(r.id, "pause")
+        launch { Live.command(r.id, "pause") } // don't wait: a device that's gone never answers
         app.player.playAt(book.id, s.trackIndex, s.positionNow(Live.serverNow()))
         onDismiss()
     }

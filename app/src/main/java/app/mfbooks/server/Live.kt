@@ -64,6 +64,12 @@ object Live {
     var onPause: ((JsonObject) -> Unit)? = null
 
     val me get() = Server.link.value?.deviceId
+
+    /** A device that stopped answering, and when (server time): treated as gone until it reports a newer state. */
+    private val gaveUpOn = MutableStateFlow<Pair<String, Long>?>(null)
+    val silenced: StateFlow<Pair<String, Long>?> = gaveUpOn
+    fun giveUp(id: String) { gaveUpOn.value = id to serverNow() }
+    fun isSilent(d: LiveDevice) = gaveUpOn.value?.let { (id, at) -> id == d.id && (d.state?.at ?: 0) <= at } == true
     fun serverNow() = System.currentTimeMillis() + offset
 
     fun setForeground(on: Boolean) { foreground = on; update() }
