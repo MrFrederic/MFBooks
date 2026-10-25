@@ -6,9 +6,11 @@ import { setServerTime, sync } from './sync'
 export interface PlayState {
   bookId: string; title?: string; trackIndex: number; positionMs: number; speed: number
   playing: boolean; sleepAt?: number | null; at: number
+  /** 0..1, the device's media volume; missing from apps that don't report it. */
+  volume?: number
 }
 export interface LiveDevice { id: string; name: string; kind: string; online: boolean; active: boolean; state?: PlayState }
-export type CmdAction = 'play' | 'pause' | 'seek' | 'skip' | 'speed' | 'sleep'
+export type CmdAction = 'play' | 'pause' | 'seek' | 'skip' | 'speed' | 'sleep' | 'volume'
 export interface CmdMsg { t: 'cmd'; id: string; from: string; action: CmdAction; [k: string]: any }
 
 export const devices = signal<LiveDevice[]>([])

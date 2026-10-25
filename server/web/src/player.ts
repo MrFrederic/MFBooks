@@ -107,11 +107,19 @@ let filters: BiquadFilterNode[] = []
 let boostNode: GainNode | null = null
 const BANDS: [BiquadFilterType, number][] = [['lowshelf', 60], ['peaking', 230], ['peaking', 910], ['peaking', 4000], ['highshelf', 14000]]
 
-/** Built on the first user gesture, so the context starts running. */
-function initGraph() {
-  if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return }
-  ctx = new AudioContext()
-  const c = ctx
+const fxOn = () => eq.value.some((b) => b !== 0) || boostMb.value > 0
+/** A click or key press is in progress (browsers only start audio contexts then). */
+const inGesture = () => navigator.userActivation?.isActive ?? false
+
+/**
+ * The EQ and boost need Web Audio, and a browser starts an AudioContext only inside a click or key press. An element
+ * routed into a context that never started plays silence while looking like it plays, so the graph is built only when an
+ * effect is set and a gesture allows it; until then the <audio> element plays directly, unprocessed.
+ */
+function ensureGraph() {
+  if (ctx) { if (ctx.state !== 'running' && inGesture()) ctx.resume().catch(() => {}); return }
+  if (!fxOn() || !inGesture()) return
+  const c = (ctx = new AudioContext())
   const src = c.createMediaElementSource(audio)
   filters = BANDS.map(([type, f]) => {
     const n = c.createBiquadFilter()
@@ -125,12 +133,24 @@ function initGraph() {
   chain.reduce((a, b) => (a.connect(b), b))
   applyFx()
 }
-document.addEventListener('pointerdown', initGraph, { capture: true })
-document.addEventListener('keydown', initGraph, { capture: true })
+document.addEventListener('pointerdown', ensureGraph, { capture: true })
+document.addEventListener('keydown', ensureGraph, { capture: true })
 
 function applyFx() {
+  ensureGraph()
   filters.forEach((f, i) => (f.gain.value = eq.value[i] ?? 0))
   if (boostNode) boostNode.gain.value = Math.pow(10, boostMb.value / 2000)
+}
+
+/** Playing but the context can't run (started without a click, or suspended by the system): say how to get sound. */
+let warnedSilent = false
+async function checkSound() {
+  if (!ctx || ctx.state === 'running') return
+  await ctx.resume().catch(() => {})
+  if ((ctx.state as AudioContextState) !== 'running' && !audio.paused && !warnedSilent) { // resume() may have changed it
+    warnedSilent = true
+    toast('Click anywhere on the page to turn the sound on')
+  }
 }
 
 // ---- Engine ----
@@ -193,10 +213,11 @@ audio.addEventListener('error', () => {
 
 export async function play() {
   if (!book.value) return
-  initGraph()
+  ensureGraph()
   playing.value = true
   try {
     await audio.play()
+    await checkSound()
   } catch (e: any) {
     playing.value = !audio.paused
     if (e?.name === 'NotAllowedError') throw new Error('The browser blocked playback: click the page once, then retry')
@@ -262,7 +283,13 @@ export function setBoost(mb: number, save: boolean) {
   if (save && book.value) push({ kind: 'book_settings', id: book.value.id, data: { boostMb: mb } })
 }
 function applyVolume() { audio.volume = Math.max(0, Math.min(1, volume.value * fade)) }
-effect(() => { applyVolume(); store('mfb.volume', volume.value) })
+let volumeReport = 0
+effect(() => {
+  applyVolume()
+  store('mfb.volume', volume.value)
+  clearTimeout(volumeReport)
+  volumeReport = setTimeout(() => { if (book.value) sendState() }, 300) // so a remote's Connect slider follows
+})
 
 function applyBookSettings(d: BookDetail) {
   const s = { ...d.settings, ...bookSettingsOf(d.id) }
@@ -397,7 +424,7 @@ function stateMsg() {
   if (!d) return { t: 'ping' }
   return {
     t: 'state', bookId: d.id, title: d.title, trackIndex: track.value, positionMs: Math.round(curPos()),
-    speed: speed.value, playing: playing.value, sleepAt: sleepAtServer(),
+    speed: speed.value, playing: playing.value, sleepAt: sleepAtServer(), volume: volume.value,
   }
 }
 function sendState() { send(stateMsg()) }
@@ -420,6 +447,7 @@ hooks.onCmd = async (m) => {
     case 'skip': return seekBook(localBookMs() + m.ms)
     case 'speed': return setSpeed(m.speed)
     case 'sleep': return setSleep(m.minutes)
+    case 'volume': volume.value = Math.max(0, Math.min(1, +m.volume || 0)); return
     default: throw new Error(`Unknown action ${m.action}`)
   }
 }

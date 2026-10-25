@@ -29,7 +29,8 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /** What a device reports it is playing; [at] is server time, [bookId] the server book id. */
-data class LiveState(val bookId: String?, val title: String?, val trackIndex: Int, val positionMs: Long, val speed: Float, val playing: Boolean, val at: Long) {
+data class LiveState(val bookId: String?, val title: String?, val trackIndex: Int, val positionMs: Long, val speed: Float, val playing: Boolean, val at: Long,
+                     /** 0..1 media volume; null from a device that doesn't report it. */ val volume: Float? = null) {
     /** Position in the track now, extrapolated while playing. */
     fun positionNow(serverNow: Long) = if (playing) positionMs + ((serverNow - at) * speed).toLong() else positionMs
 }
@@ -105,9 +106,10 @@ object Live {
     private fun send(m: JsonObject) { if (open && ws?.send(m.toString()) == true) lastSent = System.currentTimeMillis() }
 
     /** Now playing on this phone; resent on change and every 5 s while playing (by the caller). */
-    fun state(bookId: String, title: String, trackIndex: Int, positionMs: Long, speed: Float, playing: Boolean) {
+    fun state(bookId: String, title: String, trackIndex: Int, positionMs: Long, speed: Float, playing: Boolean, volume: Float) {
         val m = JsonObject(mapOf("t" to JsonPrimitive("state"), "bookId" to JsonPrimitive(bookId), "title" to JsonPrimitive(title),
-            "trackIndex" to JsonPrimitive(trackIndex), "positionMs" to JsonPrimitive(positionMs), "speed" to JsonPrimitive(speed), "playing" to JsonPrimitive(playing)))
+            "trackIndex" to JsonPrimitive(trackIndex), "positionMs" to JsonPrimitive(positionMs), "speed" to JsonPrimitive(speed), "playing" to JsonPrimitive(playing),
+            "volume" to JsonPrimitive(volume)))
         lastState = m
         send(m)
     }
@@ -138,7 +140,7 @@ object Live {
                     LiveDevice(d.str("id")!!, d.str("name").orEmpty(), d.str("kind").orEmpty(), d.flag("online"), d.flag("active"),
                         (d["state"] as? JsonObject)?.let { s ->
                             LiveState(s.str("bookId"), s.str("title"), s.num("trackIndex")?.toInt() ?: 0, s.num("positionMs")?.toLong() ?: 0,
-                                s.num("speed")?.toFloat() ?: 1f, s.flag("playing"), s.num("at")?.toLong() ?: serverNow())
+                                s.num("speed")?.toFloat() ?: 1f, s.flag("playing"), s.num("at")?.toLong() ?: serverNow(), s.num("volume")?.toFloat())
                         })
                 }
             }

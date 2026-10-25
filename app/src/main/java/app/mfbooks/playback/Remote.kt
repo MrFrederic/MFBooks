@@ -123,3 +123,16 @@ class RemotePlayer(looper: Looper, val bookId: String, private val items: List<M
         return Futures.immediateVoidFuture()
     }
 }
+
+/** The phone's media volume as 0..1, what other devices see and set (Spotify Connect's volume row). */
+fun mediaVolume(context: Context): Float {
+    val am = context.getSystemService(android.media.AudioManager::class.java)
+    val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+    return am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC).toFloat() / max
+}
+
+fun setMediaVolume(context: Context, v: Float) {
+    val am = context.getSystemService(android.media.AudioManager::class.java)
+    val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+    am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Math.round(v.coerceIn(0f, 1f) * max), 0)
+}

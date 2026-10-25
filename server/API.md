@@ -111,11 +111,11 @@ GET  /sync?since=N                          → {seq, now, changes: [Change]}
 Text frames, JSON, discriminated by `t`. A device with no frame for 15 s is offline.
 
 Client → server:
-- `{t: "state", bookId, title?, trackIndex, positionMs, speed, playing, sleepAt?}`: on every change and every 5 s while playing.
+- `{t: "state", bookId, title?, trackIndex, positionMs, speed, playing, sleepAt?, volume?}`: on every change and every 5 s while playing. `volume` is the device's media volume, 0..1.
 - `{t: "ping"}`: every 5 s when nothing else was sent.
 - `{t: "cmd", id, target, action, ...}`: `action` is one of
   - `play` `{bookId?, trackIndex?, positionMs?, speed?}`: with a book = load it there and play (handoff)
-  - `pause`, `seek` `{trackIndex, positionMs}`, `skip` `{ms}` (±), `speed` `{speed}`, `sleep` `{minutes}` (null = off, -1 = end of chapter)
+  - `pause`, `seek` `{trackIndex, positionMs}`, `skip` `{ms}` (±), `speed` `{speed}`, `sleep` `{minutes}` (null = off, -1 = end of chapter), `volume` `{volume}` (0..1)
 - `{t: "ack", id, ok, error?}`: reply to a received cmd.
 
 Server → client:

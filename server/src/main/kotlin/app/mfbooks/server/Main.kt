@@ -35,7 +35,7 @@ import java.security.SecureRandom
 import java.util.Base64
 import kotlin.time.Duration.Companion.seconds
 
-const val VERSION = "0.1.0"
+const val VERSION = "0.2.1"
 const val MIN_APP_VERSION = "0.2.0"
 
 val log = LoggerFactory.getLogger("mfbooks")!!
@@ -84,6 +84,8 @@ fun Application.module(app: App, web: File? = null) {
     install(StatusPages) {
         exception<ApiError> { call, e -> call.respond(e.status, j("error" to e.message)) }
         exception<Throwable> { call, e ->
+            // The listener seeked, skipped or closed the tab mid-stream: nothing to answer, nothing to log.
+            if (e.clientGone()) return@exception
             log.error("${call.request.local.method.value} ${call.request.local.uri.substringBefore('?')}", e)
             call.respond(HttpStatusCode.InternalServerError, j("error" to "Server error"))
         }
@@ -110,6 +112,11 @@ fun Application.module(app: App, web: File? = null) {
         }
         if (web != null) staticFiles("/", web) { default("index.html") }
     }
+}
+
+/** A write to a connection the client already closed (Ogg seeking alone cancels a request per bisection step). */
+fun Throwable.clientGone() = generateSequence(this) { it.cause }.any {
+    it is java.io.IOException && (it.javaClass.simpleName.startsWith("Closed") || it.message in setOf("Broken pipe", "Connection reset by peer"))
 }
 
 fun random(n: Int) = ByteArray(n).also(SecureRandom()::nextBytes)

@@ -1,11 +1,11 @@
 // The player: bottom bar (W2), its popovers, Connect (W4/W5), the Now playing panel and the full-screen player.
 import { signal } from '@preact/signals'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { coverUrl, fmtDuration, fmtTime, playable } from './api'
+import { coverUrl, fmtDuration, fmtTime, playable, toast } from './api'
 import { Icon, SkipIcon } from './icons'
-import { devices, type LiveDevice } from './live'
+import { cmd, devices, type LiveDevice } from './live'
 import {
-  boostMb, book, chapterAt, chaptersOf, ctl, eq, moveTo, myId, remote, remotePos, setBoost, setEq, skipBackSec, skipFwdSec,
+  boostMb, book, chapterAt, chaptersOf, ctl, eq, moveTo, myId, remote, setBoost, setEq, skipBackSec, skipFwdSec,
   sleep, view, volume,
 } from './player'
 import { serverNow } from './sync'
@@ -188,7 +188,6 @@ export function ConnectPopover() {
     setBusy(t === 'here' ? 'here' : t.id)
     try { await moveTo(t); close() } finally { setBusy(null) }
   }
-  const progress = c && v.book ? (v.bookMs - c.start) / (c.dur || 1) : 0
   return (
     <Popover anchor={at} onClose={close} label="Connect to a device" class="pop-connect">
       <div class="pop-title">Connect</div>
@@ -200,12 +199,7 @@ export function ConnectPopover() {
           </div>
           <Icon name={r ? kindIcon(r.kind) : 'computer'} size={36} />
         </div>
-        {r ? (
-          <div class="dc-row">
-            <span class="tnum">{fmtTime(r.state ? remotePos(r.state) : 0)}</span>
-            <Range label="Position in chapter" min={0} max={1} step={0.001} value={progress} disabled={!c} onChange={(x) => c && ctl.seekBook(c.start + x * c.dur)} />
-          </div>
-        ) : <Volume />}
+        {r ? <RemoteVolume d={r} /> : <Volume />}
       </div>
       {((r && playable(v.book)) || others.length > 0) && <div class="pop-sub">Select a device</div>}
       {/* A book that isn't on the server can be controlled on the phone, not moved here. */}
@@ -226,6 +220,20 @@ export function ConnectPopover() {
       ))}
       {!r && !others.length && <p class="pop-note">No other device is online. Open MFBooks on your phone, or <a href="#/devices" class="link" onClick={close}>link a phone</a>.</p>}
     </Popover>
+  )
+}
+
+/** The other device's media volume, set with a live command (it reports the level in its state). */
+function RemoteVolume({ d }: { d: LiveDevice }) {
+  const [drag, setDrag] = useState<number | null>(null)
+  const v = drag ?? d.state?.volume
+  if (v == null) return null // an app too old to report it
+  const send = (x: number) => { setDrag(null); cmd(d.id, 'volume', { volume: x }).catch((e: Error) => toast(`${d.name}: ${e.message}`)) }
+  return (
+    <div class="volume">
+      <Icon name={v ? 'volume' : 'volumeOff'} size={20} />
+      <Range label={`Volume on ${d.name}`} valueText={`${Math.round(v * 100)} %`} min={0} max={1} step={0.01} value={v} onInput={setDrag} onChange={send} />
+    </div>
   )
 }
 

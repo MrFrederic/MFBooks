@@ -51,6 +51,11 @@ import kotlinx.serialization.json.jsonObject
 import app.mfbooks.data.Book
 import app.mfbooks.data.BookProgress
 import app.mfbooks.playback.Command
+import app.mfbooks.playback.mediaVolume
+import app.mfbooks.playback.setMediaVolume
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material3.Slider
 import app.mfbooks.server.CLOUD_ROOT
 import app.mfbooks.server.Cloud
 import app.mfbooks.server.Live
@@ -266,13 +271,27 @@ fun ConnectSheet(onDismiss: () -> Unit) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Connect", Modifier.padding(start = 8.dp, bottom = 4.dp), style = MaterialTheme.typography.headlineSmallEmphasized)
             val cs = MaterialTheme.colorScheme
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(cs.surfaceContainerHigh).padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(remote?.name ?: "This phone", style = MaterialTheme.typography.titleLargeEmphasized, color = cs.primary)
-                    val what = remote?.state?.title ?: np.book?.title
-                    what?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = cs.primary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(cs.surfaceContainerHigh).padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(remote?.name ?: "This phone", style = MaterialTheme.typography.titleLargeEmphasized, color = cs.primary)
+                        val what = remote?.state?.title ?: np.book?.title
+                        what?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = cs.primary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
+                    Icon(kindIcon(remote?.kind ?: "android"), null, Modifier.size(36.dp), tint = cs.primary)
                 }
-                Icon(kindIcon(remote?.kind ?: "android"), null, Modifier.size(36.dp), tint = cs.primary)
+                // The volume of the device that plays, as in Spotify Connect: the other device's by command, or this phone's media volume.
+                var drag by remember { mutableStateOf<Float?>(null) }
+                val level = drag ?: if (remote != null) remote.state?.volume else mediaVolume(ctx)
+                if (level != null) Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (level > 0f) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff, null, tint = cs.primary)
+                    Slider(level, { v -> drag = v; if (remote == null) setMediaVolume(ctx, v) }, Modifier.padding(start = 12.dp).weight(1f),
+                        onValueChangeFinished = {
+                            val v = drag ?: return@Slider
+                            if (remote != null) scope.launch { Live.command(remote.id, "volume", mapOf("volume" to v))?.let { snackbar.showSnackbar("${remote.name}: $it") }; drag = null }
+                            else drag = null
+                        })
+                }
             }
             if (remote != null) DeviceRow("This phone", "android", null) { pullHere() }
             others.forEach { d -> DeviceRow(d.name, d.kind, d.state?.title?.let { if (d.state.playing) "Playing $it" else "Paused · $it" }) { moveTo(d) } }

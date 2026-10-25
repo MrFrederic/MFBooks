@@ -100,6 +100,9 @@ class PlaybackService : MediaLibraryService() {
     private var forceStopJob: Job? = null
     private var buttonsKey = ""
     private var remote: RemotePlayer? = null
+    private val volumeReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) = reportLive()
+    }
     private var loadedRemoteBook: String? = null // local id of the book [remote] mirrors
 
     private val carObserver = Observer<Int> {
@@ -153,6 +156,10 @@ class PlaybackService : MediaLibraryService() {
         car = CarConnection(this)
         car.type.observeForever(carObserver)
         Live.onCommand = ::onLiveCommand
+        // Hardware buttons change the media volume; the other devices' Connect slider follows.
+        // ponytail: VOLUME_CHANGED_ACTION isn't public API but every Android version sends it; Settings observers don't fire on 14.
+        androidx.core.content.ContextCompat.registerReceiver(this, volumeReceiver, android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         Live.onPause = { if (remote == null && pl.playWhenReady) pl.pause() }
         scope.launch { Live.devices.collect(::onDevices) }
         scope.launch {
@@ -166,6 +173,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         Live.onCommand = null; Live.onPause = null; Live.setPlaying(false)
+        unregisterReceiver(volumeReceiver)
         remote?.let { session.player = player; it.release(); remote = null; Live.setRemote(false) }
         saver.save(sidecar = true)
         saver.onIsPlayingChanged(false)
@@ -550,7 +558,7 @@ class PlaybackService : MediaLibraryService() {
         if (remote != null) return
         val snap = saver.snapshot() ?: return
         val sid = snap.book.serverId ?: return
-        Live.state(sid, snap.book.title, snap.trackIndex, snap.positionInTrackMs, pl.playbackParameters.speed, pl.playWhenReady)
+        Live.state(sid, snap.book.title, snap.trackIndex, snap.positionInTrackMs, pl.playbackParameters.speed, pl.playWhenReady, mediaVolume(this))
     }
 
     /** Becomes the remote control of a device that started playing while this phone is idle; stays until it leaves or we play. */
@@ -646,6 +654,7 @@ class PlaybackService : MediaLibraryService() {
             "skip" -> { b.putLong(Command.EXTRA_MS, m.num("ms")?.toLong() ?: 0); local(Command.SEEK_BY) }
             "speed" -> { b.putFloat(Command.EXTRA_SPEED, m.num("speed")?.toFloat() ?: 1f); local(Command.SET_SPEED) }
             "sleep" -> m.num("minutes")?.toInt()?.let { b.putInt(Command.EXTRA_MINUTES, it); local(Command.SLEEP_ON) } ?: local(Command.SLEEP_OFF)
+            "volume" -> { setMediaVolume(this, m.num("volume")?.toFloat() ?: return "No volume"); reportLive() }
             else -> return "Unknown command"
         }
         return null

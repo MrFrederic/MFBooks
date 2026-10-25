@@ -12,8 +12,8 @@ android {
         applicationId = "app.mfbooks"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.0"
+        versionCode = 4
+        versionName = "0.2.1"
     }
     // Release signing from env (CI secrets); unsigned release build when absent.
     val ks = System.getenv("SIGNING_KEYSTORE")

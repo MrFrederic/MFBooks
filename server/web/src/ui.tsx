@@ -1,8 +1,8 @@
 // Router, shell state and small widgets.
 import { signal } from '@preact/signals'
 import type { ComponentChildren } from 'preact'
-import { createPortal } from 'preact/compat'
-import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
+import { render } from 'preact'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { type BookSummary, coverUrl, initials, toasts } from './api'
 import { Icon } from './icons'
 
@@ -36,6 +36,18 @@ export const fullPlayer = signal(false)
 
 // ---- Popovers: anchored to a trigger, rendered on top of everything ----
 
+/**
+ * Renders [children] into its own root at the end of <body>, out of any scrolling or clipping parent.
+ * Not preact/compat's createPortal: importing compat makes every input's onChange fire on each input event
+ * (React's semantics), which turned slider releases into a seek per pixel.
+ */
+function Portal({ children }: { children: ComponentChildren }) {
+  const host = useMemo(() => document.createElement('div'), [])
+  useLayoutEffect(() => { document.body.appendChild(host); return () => { render(null, host); host.remove() } }, [])
+  useLayoutEffect(() => { render(<>{children}</>, host) })
+  return null
+}
+
 export function Popover(p: { anchor: HTMLElement | null; onClose: () => void; children: ComponentChildren; label: string; class?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const [at, setAt] = useState<{ left: number; top: number } | null>(null)
@@ -55,12 +67,13 @@ export function Popover(p: { anchor: HTMLElement | null; onClose: () => void; ch
     ref.current?.querySelector<HTMLElement>('button, input, a')?.focus({ preventScroll: true })
     return () => { document.removeEventListener('pointerdown', out, true); removeEventListener('keydown', esc, true) }
   }, [])
-  return createPortal(
-    <div ref={ref} role="dialog" aria-label={p.label} class={`popover ${p.class ?? ''}`}
-      style={at ? { left: at.left, top: at.top } : { visibility: 'hidden', left: 0, top: 0 }}>
-      {p.children}
-    </div>,
-    document.body,
+  return (
+    <Portal>
+      <div ref={ref} role="dialog" aria-label={p.label} class={`popover ${p.class ?? ''}`}
+        style={at ? { left: at.left, top: at.top } : { visibility: 'hidden', left: 0, top: 0 }}>
+        {p.children}
+      </div>
+    </Portal>
   )
 }
 
