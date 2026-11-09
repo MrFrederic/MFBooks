@@ -36,7 +36,7 @@ import java.security.SecureRandom
 import java.util.Base64
 import kotlin.time.Duration.Companion.seconds
 
-const val VERSION = "0.2.2"
+const val VERSION = "0.3.0"
 const val MIN_APP_VERSION = "0.2.0"
 
 val log = LoggerFactory.getLogger("mfbooks")!!
