@@ -5,6 +5,8 @@ package app.mfbooks.ui.reader
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import kotlinx.coroutines.delay
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -152,6 +154,8 @@ import kotlin.math.min
 private const val LEAD_MS = 100L
 /** Between polls the clock runs on its own, but never further than this if the polls stop. */
 private const val MAX_EXTRAPOLATE_MS = 1_000L
+/** Show the reader after this long even if there's no narration position to scroll to. */
+private const val NO_NARRATION_MS = 700L
 // ponytail: map lookups run at 25 Hz, not per frame. SyncMap.at returns an object, and no word is shorter than 40 ms.
 private const val LOOKUP_STEP_MS = 40L
 
@@ -256,6 +260,8 @@ private class ReadAlong(val doc: BookTextDoc, val player: PlayerConnection, val 
     var activeLayout by mutableStateOf<TextLayoutResult?>(null)
     var relaid by mutableIntStateOf(0)
     var following by mutableStateOf(true)
+    /** The list has reached the narration once, so the reader can appear without showing the book's first page. */
+    var positioned by mutableStateOf(false)
     var look by mutableStateOf<Look?>(null)
     var menu by mutableStateOf<SentenceTarget?>(null)
 
@@ -396,12 +402,19 @@ private class ReadAlong(val doc: BookTextDoc, val player: PlayerConnection, val 
         followJob?.cancel()
         followJob = scope.launch {
             val viewport = list.layoutInfo.viewportSize.height
+            if (itemInfo(b) == null || geometry() == null) {
+                list.scrollToItem(b, -(viewport * anchor).toInt())
+                withFrameNanos {} // the block is laid out now, so the exact line can be reached below
+            }
             val item = itemInfo(b)
             val g = geometry()
-            if (item == null || g == null) { list.scrollToItem(b, -(viewport * anchor).toInt()); return@launch }
-            val d = followDelta(item.offset + g.lineTop, viewport, anchor)
-            if (abs(d) < 1f) return@launch
-            if (animated && !reduced) list.animateScrollBy(d, tween(420, easing = FastOutSlowInEasing)) else list.scrollBy(d)
+            if (item != null && g != null) {
+                val d = followDelta(item.offset + g.lineTop, viewport, anchor)
+                if (abs(d) >= 1f) {
+                    if (animated && !reduced && positioned) list.animateScrollBy(d, tween(420, easing = FastOutSlowInEasing)) else list.scrollBy(d)
+                }
+            }
+            positioned = true
         }
     }
 
@@ -432,7 +445,7 @@ private class ReadAlong(val doc: BookTextDoc, val player: PlayerConnection, val 
 @Composable
 internal fun Reader(
     book: Book, text: BookText, tracks: List<Track>, settings: Settings, locked: Boolean,
-    anchor: Float, bottomInset: Dp, modifier: Modifier = Modifier,
+    anchor: Float, bottomInset: Dp, active: Boolean = true, modifier: Modifier = Modifier,
 ) {
     val app = MFBooksApp.get(LocalContext.current)
     val doc by produceState<BookTextDoc?>(null, book.id, text.textSha) {
@@ -441,13 +454,13 @@ internal fun Reader(
     }
     val d = doc
     if (d == null) { Box(modifier); return }
-    key(d) { ReaderBody(book, text, tracks, d, settings, locked, anchor, bottomInset, modifier) }
+    key(d) { ReaderBody(book, text, tracks, d, settings, locked, anchor, bottomInset, active, modifier) }
 }
 
 @Composable
 private fun ReaderBody(
     book: Book, text: BookText, tracks: List<Track>, doc: BookTextDoc, settings: Settings, locked: Boolean,
-    anchor: Float, bottomInset: Dp, modifier: Modifier,
+    anchor: Float, bottomInset: Dp, active: Boolean, modifier: Modifier,
 ) {
     val context = LocalContext.current
     val app = MFBooksApp.get(context)
@@ -485,10 +498,13 @@ private fun ReaderBody(
         ra.map = m
         map = m
     }
-    LaunchedEffect(ra, map, text.offsetMs) {
+    LaunchedEffect(ra, map, text.offsetMs, active) {
         ra.invalidateLookup()
         if (map == null) return@LaunchedEffect
         val onFrame: (Long) -> Unit = ra::tick
+        withFrameNanos(onFrame)
+        if (!active) return@LaunchedEffect // hidden behind the cover: place the text once, then cost nothing
+        ra.requestFollow(animated = false) // narration moved on while it was hidden
         while (true) {
             withFrameNanos(onFrame)
             val np = player.state.value
@@ -558,7 +574,9 @@ private fun ReaderBody(
                 }
             }
         }
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+        val shown by animateFloatAsState(if (ra.positioned) 1f else 0f, MaterialTheme.motionScheme.defaultEffectsSpec(), label = "readerShown")
+        LaunchedEffect(ra) { delay(NO_NARRATION_MS); ra.positioned = true }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().graphicsLayer { alpha = shown }) {
             LaunchedEffect(ra, maxHeight) { ra.requestFollow(animated = false) }
             LazyColumn(
                 Modifier.fillMaxSize().fadeEdges(), list,
