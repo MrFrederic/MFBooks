@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -22,7 +23,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -61,6 +64,16 @@ object Server {
     var lastSeq: Long
         get() = prefs.getLong("seq", 0)
         set(v) = prefs.edit().putLong("seq", v).apply()
+    /** The server said `features: ["text"]`; [Sync] sends no `text` record otherwise (an older server rejects the kind). */
+    @Volatile var textEnabled = false
+        private set
+    /** Text that existed before the server had the feature has been queued once. */
+    var textBackfilled: Boolean
+        get() = prefs.getBoolean("textBackfilled", false)
+        set(v) = prefs.edit().putBoolean("textBackfilled", v).apply()
+    /** What [TextSync] last knew the server to hold, by `t|s|f.<server id>`. */
+    fun known(key: String): String? = prefs.getString("text.$key", null)
+    fun setKnown(key: String, v: String?) = prefs.edit().putString("text.$key", v).apply()
     var lastSyncAt: Long
         get() = prefs.getLong("syncAt", 0)
         set(v) = prefs.edit().putLong("syncAt", v).apply()
@@ -89,7 +102,8 @@ object Server {
         val info = call(url, "GET", "/info", null, token).jsonObject
         val l = Link(url, token, o.str("deviceId").orEmpty(), info.str("name") ?: "MFBooks")
         prefs.edit().putString("url", l.url).putString("token", l.token).putString("deviceId", l.deviceId).putString("name", l.name)
-            .putLong("seq", 0).putLong("syncAt", 0).apply()
+            .putLong("seq", 0).putLong("syncAt", 0).putBoolean("textBackfilled", false)
+            .apply { prefs.all.keys.filter { it.startsWith("text.") }.forEach(::remove) }.apply()
         val db = MFBooksApp.get(context).db.sync()
         db.clearSeen(); db.clearPending(); db.setSeen(SyncSeen("enabled", 0))
         _link.value = l
@@ -111,6 +125,7 @@ object Server {
         if ((info["apiVersion"]?.jsonPrimitive?.int ?: 0) != API_VERSION) throw IOException("This server speaks a different API version")
         val min = info.str("minAppVersion").orEmpty()
         if (compareVersions(appVersion, min) < 0) throw IOException("The server needs MFBooks $min or newer")
+        textEnabled = (info["features"] as? JsonArray)?.any { (it as? JsonPrimitive)?.contentOrNull == "text" } == true
     }
 
     suspend fun get(path: String) = call("GET", path)
@@ -129,10 +144,19 @@ object Server {
         http.newCall(req).execute().use { r -> r.code to (r.body.string().takeIf { it.isNotBlank() }?.let { SyncJson.parseToJsonElement(it).jsonObject } ?: JsonObject(emptyMap())) }
     }
 
-    /** Opens a download stream (caller closes it). */
-    suspend fun download(path: String): okhttp3.Response = withContext(Dispatchers.IO) {
+    /** Whole-file PUT, streamed from disk; returns the status and the server's JSON. */
+    suspend fun putFile(path: String, file: File, ifMatch: String?): Pair<Int, JsonObject> = withContext(Dispatchers.IO) {
         val l = _link.value ?: throw IOException("Not connected")
-        val r = http.newCall(Request.Builder().url(l.url + "/api/v1" + path).header("Authorization", "Bearer ${l.token}").build()).execute()
+        val req = Request.Builder().url(l.url + "/api/v1" + path).header("Authorization", "Bearer ${l.token}")
+            .apply { ifMatch?.let { header("If-Match", "\"$it\"") } }.put(file.asRequestBody("application/octet-stream".toMediaType())).build()
+        http.newCall(req).execute().use { r -> r.code to (r.body.string().takeIf { it.isNotBlank() }?.let { runCatching { SyncJson.parseToJsonElement(it).jsonObject }.getOrNull() } ?: JsonObject(emptyMap())) }
+    }
+
+    /** Opens a download stream (caller closes it). */
+    suspend fun download(path: String, headers: Map<String, String> = emptyMap()): okhttp3.Response = withContext(Dispatchers.IO) {
+        val l = _link.value ?: throw IOException("Not connected")
+        val r = http.newCall(Request.Builder().url(l.url + "/api/v1" + path).header("Authorization", "Bearer ${l.token}")
+            .apply { headers.forEach { (k, v) -> header(k, v) } }.build()).execute()
         if (!r.isSuccessful) { r.close(); throw ServerError(r.code, "HTTP ${r.code}") }
         r
     }

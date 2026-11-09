@@ -14,7 +14,7 @@ Every endpoint needs auth except `info`, `setup` (until done), `auth/login`, `au
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/info` | → `{name, version, apiVersion: 1, minAppVersion, setupDone}` |
+| GET | `/info` | → `{name, version, apiVersion: 1, minAppVersion, setupDone, features: ["text"]}` |
 | GET | `/setup` | → `{setupDone}` |
 | POST | `/setup` | `{username, password, serverName, convert}` → `{deviceId}` + cookie. 409 once done |
 | POST | `/auth/login` | `{username, password, deviceName, kind: "web"\|"android"}` → `{deviceId, token?}` (token only for android; web gets the cookie). 401 bad credentials, 429 locked out |
@@ -51,7 +51,8 @@ Every endpoint needs auth except `info`, `setup` (until done), `auth/login`, `au
 ```
 `cloud` is null for a book the phone synced but never uploaded. `verified` = every original's SHA-256 matched on arrival.
 
-`BookDetail` = `BookSummary` + `{ description, publisher, tracks: [Track], chapters: [Chapter], settings: Settings|null, bookmarks: [Bookmark], conflict: null|Conflict }`
+`BookDetail` = `BookSummary` + `{ description, publisher, tracks: [Track], chapters: [Chapter], settings: Settings|null, bookmarks: [Bookmark], conflict: null|Conflict, text: null|Text }`
+- Text: the `text` record's data + `updatedAt`, null when the book has none
 - Track: `{index, fileName, title, durationMs, sizeBytes, sha256, cloud: null | {state: "receiving"|"ready", format, bytes, received}}`
 - Chapter: `{index, title, trackIndex, startInTrackMs, durationMs, startInBookMs}`
 - Settings: `{speed, savedToggleSpeed, pitch, boostMb, eqBandsDb ("0,0,0,0,0" for 60/230/910/4k/14k Hz), balance, mono, skipSilence, skipStartMs, skipEndMs, repeatMode}` (each nullable)
@@ -70,7 +71,7 @@ Every endpoint needs auth except `info`, `setup` (until done), `auth/login`, `au
 | GET, HEAD | `/books/{id}/files/{index}` | stream/download with `Range`; auth or `?exp=&sig=` |
 | POST | `/books/{id}/links` | → `{files: [url], cover: url, expiresAt}` signed links (6 h) for Cast |
 | DELETE | `/books/{id}/files` | delete the cloud copy only; the record, progress and stats stay |
-| DELETE | `/books/{id}` | delete the book everywhere (tombstone) |
+| DELETE | `/books/{id}` | delete the book everywhere (tombstone), and its text |
 
 ### Web or "Add to cloud" upload (audio file or zip of a book folder)
 
@@ -82,6 +83,29 @@ Every endpoint needs auth except `info`, `setup` (until done), `auth/login`, `au
 
 `Upload` = `{id, name, size, offset, state: "receiving"|"importing"|"done"|"failed", bookId?, error?}`. When `offset == size` the server imports in the background; poll `GET /uploads/{id}` or wait for the `book` live event.
 
+### Read-along text
+
+Files live in `books/<id>/text/`: `source.*`, `text.json.gz`, `sync.json.gz`. Bytes travel here; the `text` record (see Sync) says which version is current. Auth as for other book routes; 404 if the book doesn't exist. `textSha` and `syncSha` are the SHA-256 (hex) of the `.gz` file as stored.
+
+| Method | Path | Body → Response |
+|---|---|---|
+| PUT | `/books/{id}/text/source?name=book.fb2` | raw file (`.fb2`, `.fb2.zip`, `.epub`, `.txt`, ≤ 64 MB) → `{textSha, syncSha, parsed}` |
+| GET | `/books/{id}/text/source` | → the file, as an attachment. 404 if never uploaded |
+| PUT | `/books/{id}/text/content` | `text.json.gz` (≤ 64 MB, also unzipped) → `{textSha, syncSha}` |
+| GET | `/books/{id}/text/content` | → gzipped JSON. 404 if none |
+| PUT | `/books/{id}/text/sync` | `sync.json.gz` for the current text; `If-Match` optional → `{syncSha}` |
+| GET | `/books/{id}/text/sync` | → gzipped JSON. 404 if none |
+| DELETE | `/books/{id}/text` | → `{}`; files gone, `text` record becomes a tombstone |
+
+- **GET content and sync** answer with `Content-Encoding: gzip` and `ETag: "<sha>"`, and 304 for a matching `If-None-Match`.
+- **Errors** carry a machine-readable reason: `{"error": "...", "reason": "..."}`. `too_large` 413 (also when the body outgrows the cap mid-stream, or the gzip expands past it). `drm`, `empty`, `unsupported`, `invalid` 400. `exists`, `no_text`, `stale_text` 409. `stale` 412; for sync its body also has `syncSha` and `updatedAt` (the record's).
+- **The first content is never overwritten**, because every offset in a map depends on it. Another `PUT content` with different bytes gets 409 `exists`; the client adopts the server's text. There are two ways to change it:
+  - `DELETE`, then upload again.
+  - A replace from a client that knows what it replaces: `If-Match: <current textSha>` on `PUT content` or `PUT source`. On `content` the old source and map are removed and the record's `textSha` follows; the same client then sends its source and map. Any other `If-Match` is 412 on source, 409 on content.
+- **PUT source** with no content yet stores the file, parses it, writes `text.json.gz` and an approximate `sync.json.gz` built from the book's tracks and chapters, and writes a `text` record (`parsed: true`). When content exists and no `If-Match` is sent nothing is parsed: the file is kept as the source if there was none (`parsed: false`), and is 409 `exists` if a different one is already there. So the app sends content first, then source, then sync.
+- **PUT sync** without `If-Match` is last writer wins. With it, a value other than the current `syncSha` is 412. It updates `syncSha` and `tier` in the record, without moving the record's time.
+- A web or "Add to cloud" zip with an `.fb2`, `.fb2.zip` or `.epub` in the book folder (or a `.txt` of at least 100 KB) gets text the same way after import.
+
 ## Sync
 
 ```
@@ -92,7 +116,7 @@ GET  /sync?since=N                          → {seq, now, changes: [Change]}
 ```
 - `now` is the client's clock; the server corrects pushed `updatedAt` by the measured offset.
 - `data` is merged shallowly into the stored record, so a client may push only the fields it changed (`{state: "FINISHED"}`). An explicit `null` clears a field.
-- Last writer wins by `updatedAt` for `book`, `progress`, `book_settings`, `bookmark`, `app_settings`. `history` and `session` are a union by id; a history event never changes once written, a session (which grows while it lasts) is last writer wins. Deletions (`deleted: true`) are kept as tombstones.
+- Last writer wins by `updatedAt` for `book`, `progress`, `book_settings`, `bookmark`, `app_settings`, `text`. `history` and `session` are a union by id; a history event never changes once written, a session (which grows while it lasts) is last writer wins. Deletions (`deleted: true`) are kept as tombstones.
 - `base` = the highest seq the client had seen for that record. A `progress` push whose base is stale, from another device, more than 60 s away from the stored position, is stored but the loser is kept as `conflict`.
 - The response holds every record with `seq > since`, including the caller's own.
 
@@ -105,6 +129,7 @@ GET  /sync?since=N                          → {seq, now, changes: [Change]}
 | `history` | UUID | `{action, trackIndex, positionMs, at}` (bookId set) |
 | `session` | UUID | `{bookTitle, bookPath, startedAt, listenedMs}` (bookId set) |
 | `app_settings` | `"app"` | device-independent prefs, e.g. `{rewindSmallSec, fwdSmallSec, sleepMinutes, theme, ...}` |
+| `text` | book id | `{textSha, syncSha, lang, words, tier ("approximate"\|"aligned"), coverage, offsetMs, sourceName}` (bookId set). Sent only to a server listing `"text"` in `features`. Bytes are uploaded before the record. A pushed tombstone removes the files |
 
 ## Live: `GET /live` (WebSocket)
 

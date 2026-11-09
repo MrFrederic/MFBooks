@@ -24,7 +24,7 @@ export const go = (hash: string) => { location.hash = hash }
 function stored<T>(k: string, def: T): T {
   try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? def } catch { return def }
 }
-const keep = <T,>(k: string, def: T) => {
+export const keep = <T,>(k: string, def: T) => {
   const s = signal<T>(stored(k, def))
   s.subscribe((v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} })
   return s
@@ -70,7 +70,7 @@ export function Popover(p: { anchor: HTMLElement | null; onClose: () => void; ch
   return (
     <Portal>
       <div ref={ref} role="dialog" aria-label={p.label} class={`popover ${p.class ?? ''}`}
-        style={at ? { left: at.left, top: at.top } : { visibility: 'hidden', left: 0, top: 0 }}>
+        style={at ? { left: `${at.left}px`, top: `${at.top}px` } : { visibility: 'hidden', left: '0', top: '0' }}>
         {p.children}
       </div>
     </Portal>

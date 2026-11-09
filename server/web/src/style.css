@@ -511,6 +511,54 @@ b { font-weight: 650; }
 .transport.big .play { width: 72px; height: 72px; }
 .full .range { --track: rgb(255 255 255 / 0.28); --fill: #fff; }
 
+/* ---- Read-along ---- */
+.full.reading { grid-template-rows: minmax(0, 1fr) auto; }
+.text-toggle { display: flex; gap: 2px; }
+.text-toggle button { height: 40px; padding: 0 18px; border-radius: 6px 20px 20px 6px; background: rgb(255 255 255 / 0.14); color: var(--on-surface-variant); font-weight: 500; transition: background-color var(--t-fast); }
+.text-toggle button:first-child { border-radius: 20px 6px 6px 20px; }
+.text-toggle button.on { background: var(--accent-on-dark); color: rgb(0 0 0 / 0.86); font-weight: 650; }
+.full-toggle { margin-left: auto; }
+.reader-layout { display: flex; gap: 24px; min-height: 0; padding: 20px 24px 0; }
+.reader-aside { flex: 1 1 280px; max-width: 340px; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.reader-head { display: flex; align-items: center; justify-content: space-between; }
+.reader-book { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+.reader-thumb { width: 72px; height: 72px; border-radius: var(--r-m); flex: none; }
+.reader-book-title { font-size: 18px; line-height: 24px; font-weight: 560; }
+.reader-device { align-self: flex-start; margin: 12px 0 0; }
+.reader-chapters-title { margin: 24px 8px 8px; font-size: 15px; line-height: 20px; font-weight: 560; color: var(--accent-on-dark); }
+.reader-aside .chapters { position: relative; flex: 1; min-height: 0; overflow-y: auto; }
+.reader-pane { flex: 999 1 560px; min-width: 0; min-height: 0; position: relative; display: flex; justify-content: center; }
+.reader-scroll { width: 100%; overflow-y: auto; outline: none; scrollbar-width: none; mask-image: linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 44px), transparent); }
+.reader-scroll::-webkit-scrollbar { display: none; }
+.reader {
+  position: relative; max-width: 680px; margin: 0 auto; padding: 16px 24px 40vh 40px;
+  font-family: 'Literata Variable', Georgia, serif; font-optical-sizing: auto; font-size: var(--reader-size); line-height: 1.73;
+  color: rgb(255 255 255 / 0.76); letter-spacing: 0;
+}
+.reader-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-family: var(--font); font-size: 14px; line-height: 20px; }
+.reader-top .tag { background: rgb(255 255 255 / 0.14); color: var(--on-surface-variant); }
+.reader-aa { font-family: 'Literata Variable', Georgia, serif; font-size: 18px; }
+.reader-top .pill { background: rgb(255 255 255 / 0.14); }
+.reader-body > * { margin: 0 0 1em; content-visibility: auto; contain-intrinsic-size: auto 8em; }
+.reader-body h1, .reader-body h2, .reader-body h3 { font-weight: 500; line-height: 1.3; }
+.reader-body h1 { font-size: 1.46em; margin-top: 0.5em; }
+.reader-body h2 { font-size: 1.28em; margin-top: 0.5em; }
+.reader-body h3 { font-size: 1.12em; }
+.reader-body blockquote { margin-inline: 1.2em; font-style: italic; }
+.reader-body .k-poem { white-space: pre-line; margin-inline: 1.2em; }
+.reader-body .k-note { font-size: 0.85em; }
+.reader.synced [data-s] { cursor: pointer; }
+.reader [data-s].past { color: rgb(255 255 255 / 0.52); }
+.reader [data-s].cur { color: #fff; }
+.reader .word { color: var(--accent-on-dark); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.3em; }
+.reader-bar { position: absolute; left: 16px; width: 4px; border-radius: 2px; background: var(--accent-on-dark); opacity: 0; transition: top 280ms var(--spring), height 280ms var(--spring), opacity var(--t-fast); }
+.reader-back { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--accent-on-dark) !important; color: rgb(0 0 0 / 0.86) !important; white-space: nowrap; }
+.reader-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 24px; padding: 12px 24px 16px; background: rgb(0 0 0 / 0.34); border-radius: var(--r-xl) var(--r-xl) 0 0; }
+.reader-controls .seek { flex: 1 1 280px; min-width: 200px; max-width: none; font-size: 13px; }
+.text-drop { transition: background-color var(--t-fast); }
+.text-drop.over { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.text-note { margin-top: 10px; }
+
 /* ---- Forms and other pages ---- */
 .panel-card { padding: 20px; border-radius: var(--r-l); background: var(--pane-2); }
 .form { display: flex; flex-direction: column; gap: 14px; }
@@ -574,6 +622,11 @@ b { font-weight: 650; }
   .player-center { grid-area: center; }
   .player-tools { grid-area: tools; }
   .player-tools .volume, .tools-sep { display: none; }
+  .reader-layout { flex-direction: column; padding: 8px 8px 0; gap: 4px; }
+  .reader-aside { flex: none; max-width: none; }
+  .reader-book, .reader-chapters-title, .reader-aside .chapters { display: none; }
+  .reader { padding-inline: 34px 18px; }
+  .reader-bar { left: 14px; }
   .full-main { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-content: center; padding: 0 24px; gap: 16px; }
   .full-cover { width: auto; height: 100%; max-height: min(46vh, 80vw); max-width: 80vw; }
   .full-chapter { font-size: 32px; }

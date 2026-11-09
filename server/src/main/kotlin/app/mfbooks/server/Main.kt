@@ -1,6 +1,7 @@
 package app.mfbooks.server
 
 import app.mfbooks.sync.SyncJson
+import app.mfbooks.text.TextParser
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -41,7 +42,7 @@ const val MIN_APP_VERSION = "0.2.0"
 val log = LoggerFactory.getLogger("mfbooks")!!
 
 /** Everything the routes share. Config comes only from the environment (see .env.example). */
-class App(val data: File) {
+class App(val data: File, val textLimit: Long = TextParser.MAX_FILE_BYTES) {
     val db = Db(File(data.apply { mkdirs() }, "mfbooks.db").path)
     val books = File(data, "books").apply { mkdirs() }
     val uploads = File(data, "uploads").apply { mkdirs() }
@@ -51,6 +52,7 @@ class App(val data: File) {
     val live = Live(this)
     val converter = Converter(this)
     val library = Library(this)
+    val text = Texts(this)
 
     val setupDone get() = db.get("password") != null
     val convertOn get() = db.get("convert") != "false"
@@ -66,9 +68,9 @@ fun main() {
     embeddedServer(CIO, port) { module(app, web) }.start(wait = true)
 }
 
-class ApiError(val status: HttpStatusCode, override val message: String) : Exception(message)
+class ApiError(val status: HttpStatusCode, override val message: String, val reason: String? = null) : Exception(message)
 
-fun fail(status: HttpStatusCode, message: String): Nothing = throw ApiError(status, message)
+fun fail(status: HttpStatusCode, message: String, reason: String? = null): Nothing = throw ApiError(status, message, reason)
 
 data class Device(val id: String, val name: String, val kind: String)
 
@@ -82,7 +84,7 @@ fun Application.module(app: App, web: File? = null) {
     install(PartialContent)
     install(AutoHeadResponse)
     install(StatusPages) {
-        exception<ApiError> { call, e -> call.respond(e.status, j("error" to e.message)) }
+        exception<ApiError> { call, e -> call.respond(e.status, if (e.reason != null) j("error" to e.message, "reason" to e.reason) else j("error" to e.message)) }
         exception<Throwable> { call, e ->
             // The listener seeked, skipped or closed the tab mid-stream: nothing to answer, nothing to log.
             if (e.clientGone()) return@exception
@@ -106,6 +108,7 @@ fun Application.module(app: App, web: File? = null) {
                 install(requireDevice)
                 accountRoutes(app)
                 libraryRoutes(app)
+                textRoutes(app)
                 syncRoutes(app)
                 liveRoutes(app)
             }

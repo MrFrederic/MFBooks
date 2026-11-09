@@ -9,6 +9,7 @@ import { Icon, type IconName } from './icons'
 import { book, chapterAt, chaptersOf, ctl, moveTo, nowPlayingId, progressBase, remote, seekTrack, starts, unloadBook, view } from './player'
 import { lastSync, push, status, sync } from './sync'
 import { Bar, confirm, Cover, go, Menu, Playing, Ring, route, Where } from './ui'
+import { TextCard } from './reader'
 
 // ---- Library state shared by the sidebar and the Library page ----
 
@@ -513,6 +514,7 @@ export function BookView({ id }: { id: string }) {
               </dl>
             ) : null}
           </section>
+          <TextCard d={d} />
         </aside>
       </div>
     </div>

@@ -23,6 +23,8 @@ function apply() {
   const s = seed == null ? new SchemeNeutral(hct, dark, 0, '2025') : new SchemeTonalSpot(hct, dark, 0, '2025')
   const st = document.documentElement.style
   for (const [k, c] of Object.entries(ROLES)) st.setProperty(`--${k}`, hexFromArgb(c.getArgb(s)))
+  // The full player is dark whatever the theme: its accent is the light tone in both.
+  st.setProperty('--accent-on-dark', hexFromArgb((dark ? C.primary : C.inversePrimary).getArgb(s)))
   st.colorScheme = dark ? 'dark' : 'light'
 }
 light.addEventListener('change', apply)

@@ -3,7 +3,7 @@ import { signal } from '@preact/signals'
 import { api, ApiError } from './api'
 
 export interface Change {
-  kind: 'book' | 'progress' | 'book_settings' | 'bookmark' | 'history' | 'session' | 'app_settings'
+  kind: 'book' | 'progress' | 'book_settings' | 'bookmark' | 'history' | 'session' | 'app_settings' | 'text'
   id: string; bookId?: string; updatedAt: number; base?: number; deleted?: boolean; data: Record<string, any>
   seq?: number; deviceId?: string; conflict?: unknown
 }

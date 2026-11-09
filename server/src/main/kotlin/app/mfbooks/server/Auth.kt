@@ -129,7 +129,7 @@ private fun password(body: JsonObject) = body.str("password").orEmpty().also {
 
 fun Route.publicRoutes(app: App) {
     val auth = app.auth
-    get("/info") { call.respond(j("name" to app.serverName, "version" to VERSION, "apiVersion" to 1, "minAppVersion" to MIN_APP_VERSION, "setupDone" to app.setupDone)) }
+    get("/info") { call.respond(j("name" to app.serverName, "version" to VERSION, "apiVersion" to 1, "minAppVersion" to MIN_APP_VERSION, "setupDone" to app.setupDone, "features" to listOf("text"))) }
     get("/setup") { call.respond(j("setupDone" to app.setupDone)) }
     post("/setup") {
         val b = call.receive<JsonObject>()
