@@ -120,6 +120,7 @@ object Cloud {
             if (p != null) app.db.library().upsertProgress(BookProgress(sid, p.num("trackIndex")?.toInt() ?: 0, p.num("positionInTrackMs")?.toLong() ?: 0, p.num("updatedAt")?.toLong() ?: 0))
             dao.deletePendingAbove(before)
         }
+        if (Server.textEnabled) (d["text"] as? JsonObject)?.let { t -> runCatching { TextSync.applyDetail(app, sid, t) } }
     }
 
     /** Drops cached info for one book right away (after deleting its cloud copy). */

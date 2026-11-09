@@ -28,10 +28,14 @@ export interface BookSettings {
   skipStartMs?: number | null; skipEndMs?: number | null; repeatMode?: string | null
 }
 export interface Conflict { deviceName: string; trackIndex: number; positionInTrackMs: number; updatedAt: number }
+export interface TextInfo {
+  textSha: string; syncSha: string | null; lang: string; words: number
+  tier: 'approximate' | 'aligned'; coverage: number; offsetMs: number; sourceName: string; updatedAt: number
+}
 export interface BookDetail extends BookSummary {
   description: string | null; publisher: string | null
   tracks: Track[]; chapters: Chapter[]; settings: BookSettings | null
-  bookmarks: unknown[]; conflict: Conflict | null
+  bookmarks: unknown[]; conflict: Conflict | null; text: TextInfo | null
 }
 export interface Info { name: string; version: string; apiVersion: number; minAppVersion: number | string; setupDone: boolean }
 export interface Me { username: string; deviceId: string; deviceName: string; kind: string }
@@ -42,7 +46,7 @@ export interface Upload { id: string; name: string; size: number; offset: number
 // ---- Fetch ----
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message) }
+  constructor(public status: number, message: string, public reason?: string) { super(message) }
 }
 
 /** Set to true when any call returns 401; the app shows the sign-in page. */
@@ -62,8 +66,8 @@ export async function api<T = any>(path: string, o: Opts = {}): Promise<T> {
   }
   if (res.status === 401 && !path.startsWith('/auth/')) signedOut.value = true
   if (!res.ok) {
-    const msg = await res.json().then((j) => j.error, () => null)
-    throw new ApiError(res.status, msg || `${res.status} ${res.statusText}`)
+    const e = await res.json().catch(() => null)
+    throw new ApiError(res.status, e?.error || `${res.status} ${res.statusText}`, e?.reason)
   }
   const text = await res.text()
   return (text ? JSON.parse(text) : {}) as T

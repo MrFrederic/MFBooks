@@ -38,6 +38,7 @@ import app.mfbooks.sync.TrackData
 import app.mfbooks.sync.decode
 import app.mfbooks.sync.sameBook
 import app.mfbooks.sync.toData
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -127,12 +128,23 @@ object Sync {
                 dao.setServerId(b.id, UUID.randomUUID().toString())
                 dao.addPending(PendingChange(tbl = "book", key = b.id, at = b.lastPlayedAt ?: b.addedAt))
             }
+            // Text added while the server didn't have the feature (or before this phone was linked) was never sent.
+            if (Server.textEnabled && !Server.textBackfilled) {
+                app.db.openHelper.writableDatabase.execSQL("INSERT INTO PendingChange(tbl, `key`, at) SELECT 'text', bookId, updatedAt FROM BookText")
+                Server.textBackfilled = true
+            }
             while (true) {
                 val max = dao.maxPending()
                 val latest = dao.pending().filter { it.id <= max }.groupBy { it.tbl to it.key }.mapValues { (_, v) -> v.maxOf { it.at } }
-                val changes = latest.mapNotNull { (k, at) -> build(app, k.first, k.second, at) }
+                val (texts, rest) = latest.entries.partition { it.key.first == Kind.TEXT }
+                val changes = rest.mapNotNull { (k, at) -> build(app, k.first, k.second, at) }
                 if (changes.isEmpty()) exchange(app, emptyList(), max)
                 else changes.chunked(300).forEach { exchange(app, it, max) }
+                // Text goes last: its files need the book's record on the server, and the record follows the files. Never to an older server.
+                if (Server.textEnabled) {
+                    val records = texts.mapNotNull { (k, at) -> app.db.library().book(k.second)?.serverId?.let { sid -> TextSync.push(app, k.second, sid, at) } }
+                    if (records.isNotEmpty()) exchange(app, records, max)
+                }
                 dao.deletePendingUpTo(max)
                 if (dao.maxPending() == max) break // nothing new while we talked to the server
             }
@@ -227,6 +239,7 @@ object Sync {
         val lib = app.db.library(); val dao = app.db.sync(); val user = app.db.userData()
         val me = Server.link.value?.deviceId
         var appSettings: JsonObject? = null
+        val texts = ArrayList<Pair<Change, Book>>()
         app.db.withTransaction {
             val before = dao.maxPending()
             val dirty = dao.pendingKeysAbove(sentUpTo).toSet()
@@ -236,11 +249,17 @@ object Sync {
                 val local = c.bookId?.let { dao.bookByServerId(it) } ?: if (c.kind == Kind.BOOK) dao.bookByServerId(c.id) else null
                 if (local != null && "${keyKind(c.kind)}:${local.id}" in dirty) continue
                 if ("${keyKind(c.kind)}:${c.id}" in dirty) continue
+                if (c.kind == Kind.TEXT) { if (local != null) texts += c to local; continue } // downloads: after the transaction
                 runCatching { applyOne(app, c, local) }.onFailure { android.util.Log.w("Sync", "can't apply ${c.kind} ${c.id}", it) }
                 if (c.kind == Kind.APP) appSettings = c.data
             }
             dao.deletePendingAbove(before)
         }
+        for ((c, b) in texts) try {
+            TextSync.applyRemote(app, c, b)
+        } catch (e: IOException) { throw e } // retried with the same cursor
+        catch (e: CancellationException) { throw e }
+        catch (e: Throwable) { android.util.Log.w("Sync", "can't apply text ${c.id}", e) }
         appSettings?.let { d ->
             val merged = JsonObject(SyncJson.encodeToJsonElement(app.prefs.now()).jsonObject + (d - DEVICE_ONLY))
             runCatching { SyncJson.decodeFromJsonElement<Settings>(merged) }.getOrNull()?.let { s -> app.prefs.update(false) { s } }
@@ -252,7 +271,7 @@ object Sync {
     private suspend fun applyOne(app: MFBooksApp, c: Change, local: Book?) {
         val lib = app.db.library(); val dao = app.db.sync(); val user = app.db.userData()
         val d = c.data
-        when (c.kind) {
+        when (c.kind) { // a statement on purpose: kinds this version doesn't know are ignored, and `text` is handled in [apply]
             Kind.BOOK -> {
                 local ?: return // unknown here: a cloud copy shows up through Cloud.refresh, anything else stays on the server
                 if (c.deleted) { if (local.rootUri == CLOUD_ROOT) lib.removeBook(local.id) else dao.setServerId(local.id, null); return }

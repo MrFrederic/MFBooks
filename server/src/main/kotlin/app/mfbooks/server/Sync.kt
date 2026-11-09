@@ -55,6 +55,13 @@ class Records(private val db: Db) {
         true
     }
 
+    /** Merges [fields] without moving the record's time, so the writer's own record, on its way, still wins. False if there is none. */
+    fun patch(kind: String, id: String, fields: JsonObject): Boolean = db.tx {
+        val old = get(kind, id)?.takeIf { !it.deleted } ?: return@tx false
+        db.update("UPDATE records SET data = ?, seq = ? WHERE kind = ? AND id = ?", Merge.apply(old.data, fields).toString(), seq() + 1, kind, id)
+        true
+    }
+
     /** A record written by the server itself (imports, deletions): always wins. */
     fun putServer(kind: String, id: String, data: JsonObject, bookId: String? = null, deleted: Boolean = false) =
         put(Change(kind, id, bookId, updatedAt = maxOf(System.currentTimeMillis(), (get(kind, id)?.updatedAt ?: 0) + 1), deleted = deleted, data = data, deviceId = "server"))
@@ -74,7 +81,9 @@ fun Route.syncRoutes(app: App) {
         var changed = false
         for (c in req.changes) {
             if (c.kind !in Kind.ALL) fail(HttpStatusCode.BadRequest, "Unknown kind ${c.kind}")
-            changed = app.records.put(c.copy(updatedAt = c.updatedAt + offset, deviceId = call.device.id, seq = 0, conflict = null)) || changed
+            val stored = app.records.put(c.copy(updatedAt = c.updatedAt + offset, deviceId = call.device.id, seq = 0, conflict = null))
+            if (stored && c.kind == Kind.TEXT && c.deleted && isBookId(c.id)) app.text.removeFiles(c.id)
+            changed = stored || changed
         }
         val seq = app.records.seq()
         if (changed) app.live.changed(seq)

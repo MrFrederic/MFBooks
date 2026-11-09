@@ -122,7 +122,7 @@ class Library(private val app: App) {
         val conflict = p?.conflict?.let { j("deviceName" to it.deviceName, "trackIndex" to it.data["trackIndex"], "positionInTrackMs" to it.data["positionInTrackMs"], "updatedAt" to it.updatedAt) }
         return JsonObject(summary(r, p, files.values.toList()) + j(
             "description" to r.data["description"], "tracks" to tracks, "chapters" to (r.data["chapters"] ?: JsonArray(emptyList())),
-            "settings" to app.records.get(Kind.SETTINGS, id)?.data, "bookmarks" to bookmarks, "conflict" to conflict,
+            "settings" to app.records.get(Kind.SETTINGS, id)?.data, "bookmarks" to bookmarks, "conflict" to conflict, "text" to app.text.info(id),
         ))
     }
 
@@ -155,6 +155,7 @@ class Library(private val app: App) {
         deleteCloud(id)
         File(app.books, id).deleteRecursively()
         app.records.putServer(Kind.BOOK, id, j(), id, deleted = true)
+        if (app.records.get(Kind.TEXT, id)?.deleted == false) app.records.putServer(Kind.TEXT, id, j(), id, deleted = true)
         app.live.changed(app.records.seq())
     }
 
@@ -183,7 +184,7 @@ class Library(private val app: App) {
         }
     }
 
-    private fun import(uploadId: String, dir: File): String {
+    private suspend fun import(uploadId: String, dir: File): String {
         val name = db.query("SELECT name FROM uploads WHERE id = ?", uploadId) { it.getString(1) }.first()
         val part = File(app.uploads, "$uploadId.part")
         dir.deleteRecursively(); dir.mkdirs()
@@ -245,6 +246,7 @@ class Library(private val app: App) {
         app.records.putServer(Kind.BOOK, id, data.toData(), id)
         app.live.changed(app.records.seq())
         app.converter.enqueue(id)
+        runCatching { app.text.importFrom(id, entries) }.onFailure { log.warn("No text for imported book $id", it) }
         return id
     }
 

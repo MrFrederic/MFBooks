@@ -138,6 +138,7 @@ interface SyncDao {
     @Query("SELECT COALESCE(MAX(id), 0) FROM PendingChange") suspend fun maxPending(): Long
     @Query("DELETE FROM PendingChange WHERE id <= :id") suspend fun deletePendingUpTo(id: Long)
     @Query("DELETE FROM PendingChange WHERE id > :id") suspend fun deletePendingAbove(id: Long)
+    @Query("DELETE FROM PendingChange WHERE tbl = :tbl AND `key` = :key AND id > :id") suspend fun deletePendingOf(tbl: String, key: String, id: Long)
     @Query("SELECT DISTINCT tbl || ':' || `key` FROM PendingChange WHERE id > :id") suspend fun pendingKeysAbove(id: Long): List<String>
     @Insert suspend fun addPending(p: PendingChange)
     @Query("DELETE FROM PendingChange") suspend fun clearPending()

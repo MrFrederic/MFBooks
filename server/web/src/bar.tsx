@@ -9,6 +9,7 @@ import {
   sleep, view, volume,
 } from './player'
 import { serverNow } from './sync'
+import { TextReader, textMode, TextToggle } from './reader'
 import { Cover, fullPlayer, Menu, nowPanel, Playing, Popover, Range } from './ui'
 
 const SPEEDS = [0.8, 1, 1.2, 1.5, 1.75, 2]
@@ -27,19 +28,19 @@ function current() {
 
 // ---- Transport and seek ----
 
-function Transport({ big }: { big?: boolean }) {
+function Transport({ big, skipsOnly }: { big?: boolean; skipsOnly?: boolean }) {
   const v = view.value
   const none = !v.book && !v.remote
   const s = big ? 32 : 26
   return (
     <div class={`transport ${big ? 'big' : ''}`}>
       <button class="icon-btn" disabled={none} title={`Back ${skipBackSec.value} seconds`} aria-label={`Back ${skipBackSec.value} seconds`} onClick={() => ctl.skip(-skipBackSec.value * 1000)}><SkipIcon dir="back" sec={skipBackSec.value} size={s} /></button>
-      <button class="icon-btn" disabled={none} title="Previous chapter" aria-label="Previous chapter" onClick={() => ctl.chapter(-1)}><Icon name="prev" size={s} /></button>
+      {!skipsOnly && <button class="icon-btn" disabled={none} title="Previous chapter" aria-label="Previous chapter" onClick={() => ctl.chapter(-1)}><Icon name="prev" size={s} /></button>}
       <button class={`play ${v.playing ? 'playing' : ''} ${v.playing && !v.remote && buffering.value ? 'loading' : ''}`} disabled={none}
         aria-label={v.playing ? (buffering.value && !v.remote ? 'Loading, click to pause' : 'Pause') : 'Play'} onClick={ctl.toggle}>
         <Icon name={v.playing ? 'pause' : 'play'} size={big ? 36 : 26} />
       </button>
-      <button class="icon-btn" disabled={none} title="Next chapter" aria-label="Next chapter" onClick={() => ctl.chapter(1)}><Icon name="next" size={s} /></button>
+      {!skipsOnly && <button class="icon-btn" disabled={none} title="Next chapter" aria-label="Next chapter" onClick={() => ctl.chapter(1)}><Icon name="next" size={s} /></button>}
       <button class="icon-btn" disabled={none} title={`Forward ${skipFwdSec.value} seconds`} aria-label={`Forward ${skipFwdSec.value} seconds`} onClick={() => ctl.skip(skipFwdSec.value * 1000)}><SkipIcon dir="fwd" sec={skipFwdSec.value} size={s} /></button>
     </div>
   )
@@ -374,6 +375,36 @@ export function FullPlayer() {
   }, [])
   if (!d) { fullPlayer.value = false; return null }
   const r = v.remote
+  const close = () => (fullPlayer.value = false)
+  if (d.text && textMode.value) return (
+    <div class="full reading" role="dialog" aria-modal="true" aria-label={`Full-screen player, ${d.title}`}>
+      {d.cover && <div class="full-bg" style={{ backgroundImage: `url(${coverUrl(d)})` }} />}
+      <div class="reader-layout">
+        <aside class="reader-aside">
+          <div class="reader-head">
+            <button class="icon-btn" title="Close player" aria-label="Close player" onClick={close}><Icon name="chevronDown" size={28} /></button>
+            <TextToggle />
+          </div>
+          <div class="reader-book">
+            <Cover b={d} class="reader-thumb" />
+            <div class="grow">
+              <a class="reader-book-title block" href={`#/book/${d.id}`} onClick={close}>{d.title}</a>
+              <span class="muted">{d.author ?? 'Unknown author'}</span>
+            </div>
+          </div>
+          {r && <span class="full-device reader-device"><Icon name={kindIcon(r.kind)} size={18} />{v.playing ? 'Playing' : 'Paused'} on {r.name}</span>}
+          <h2 class="reader-chapters-title">Chapters</h2>
+          <ChapterList />
+        </aside>
+        <TextReader d={d} />
+      </div>
+      <footer class="reader-controls">
+        <Transport skipsOnly />
+        <SeekBar />
+        <SpeedMenu />
+      </footer>
+    </div>
+  )
   return (
     <div class="full" role="dialog" aria-modal="true" aria-label={`Full-screen player, ${d.title}`}>
       {d.cover && <div class="full-bg" style={{ backgroundImage: `url(${coverUrl(d)})` }} />}
@@ -381,6 +412,7 @@ export function FullPlayer() {
         <button class="icon-btn" title="Exit full screen" aria-label="Exit full screen" onClick={() => (fullPlayer.value = false)}><Icon name="fullscreenExit" /></button>
         <a class="full-book ellip" href={`#/book/${d.id}`} onClick={() => (fullPlayer.value = false)}>{d.title}</a>
         {r && <span class="full-device"><Icon name={kindIcon(r.kind)} size={18} />{v.playing ? 'Playing' : 'Paused'} on {r.name}</span>}
+        {d.text && <span class={r ? '' : 'full-toggle'}><TextToggle /></span>}
       </header>
       <div class="full-main">
         <Cover b={d} class="full-cover" />
