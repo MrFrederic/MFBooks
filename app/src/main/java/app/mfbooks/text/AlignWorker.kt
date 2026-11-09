@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.ServiceInfo
-import android.net.ConnectivityManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
@@ -34,7 +33,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -51,11 +49,13 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
     private var voskHeld = false
 
     private class RetryLater(message: String) : Exception(message)
+    private class VoskNotInstalled : Exception()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try { match() }
         catch (e: CancellationException) { withContext(NonCancellable) { noteStop() }; throw e }
         catch (e: RetryLater) { setState(TextState.QUEUED, e.message); Result.retry() }
+        catch (e: VoskNotInstalled) { stop(Matching.NEEDS_VOSK) }
         catch (e: SpeechFailure) { Log.w(TAG, "$bookId: ${e.kind}", e); stop(e.message ?: "Speech recognition failed") }
         catch (e: Exception) {
             Log.w(TAG, "$bookId failed", e)
@@ -113,7 +113,7 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
                             if (settings.speechEngine != SpeechEnginePref.AUTO || current is VoskEngine) throw f
                             Log.w(TAG, "$bookId: Android engine failed mid-job (${f.kind}), switching to Vosk")
                             current.close()
-                            current = openVosk(row.lang, confirmed = false).also { engine = it }
+                            current = openVosk(row.lang).also { engine = it }
                             engineName = current.name
                             current.transcribe(pcm)
                         }
@@ -152,35 +152,33 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         val android = if (Build.VERSION.SDK_INT >= 34 && locale != null && androidRecognizerAvailable(applicationContext)) AndroidEngine(applicationContext, locale) else null
         if (android == null) Log.i(TAG, "$bookId: no on-device recogniser for this phone or language")
         return when (pref) {
-            SpeechEnginePref.VOSK -> openVosk(lang, confirmed = true)
+            SpeechEnginePref.VOSK -> openVosk(lang)
             SpeechEnginePref.ANDROID -> {
                 if (Build.VERSION.SDK_INT < 34 || android == null) throw SpeechFailure(SpeechFailure.Kind.UNAVAILABLE, "This phone has no on-device recogniser for this book")
                 android.ensureLanguage()
                 android
             }
             SpeechEnginePref.AUTO -> {
-                // A resumed job keeps the engine it was using; only a fresh job probes.
-                val usable = Build.VERSION.SDK_INT >= 34 && android != null && lastEngine?.startsWith("vosk") != true && try {
+                // Vosk is only here if the user downloaded it, so that choice wins.
+                if (ModelStore.spec(lang)?.let { ModelStore.installed(applicationContext, it) } == true) return openVosk(lang)
+                // A job resuming on the Android engine doesn't probe it again.
+                val usable = Build.VERSION.SDK_INT >= 34 && android != null && try {
                     android.ensureLanguage()
-                    lastEngine != null || probe(android, doc, tracks, audioMs)
+                    lastEngine?.startsWith("android") == true || probe(android, doc, tracks, audioMs)
                 } catch (e: SpeechFailure) { Log.i(TAG, "$bookId: Android engine unusable (${e.kind}): ${e.message}"); false }
-                if (usable) android!! else openVosk(lang, confirmed = false)
+                if (usable) android!! else openVosk(lang)
             }
         }
     }
 
-    /** Vosk for [lang]. [confirmed]: the user agreed to the download (Vosk chosen, or no Android engine at all). */
-    private suspend fun openVosk(lang: String, confirmed: Boolean): SpeechEngine {
+    /** Vosk for [lang], if the user has downloaded it. The job never fetches it: the book's card offers that. */
+    private fun openVosk(lang: String): SpeechEngine {
         val spec = ModelStore.spec(lang) ?: throw SpeechFailure(SpeechFailure.Kind.LANGUAGE, "No speech model for this language")
+        if (!ModelStore.installed(applicationContext, spec)) throw VoskNotInstalled()
         if (!RecognizerSlots.vosk.tryLock()) throw RetryLater("Waiting for another book to finish matching")
         voskHeld = true
-        if (!confirmed && !ModelStore.installed(applicationContext, spec) &&
-            applicationContext.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered)
-            throw RetryLater("Waiting for Wi-Fi to download the speech model")
-        val dir = try { ModelStore.ensure(applicationContext, spec) } catch (e: IOException) {
-            throw RetryLater("The speech model couldn't be downloaded: ${e.message}")
-        }
-        return VoskEngine(spec, dir)
+        ModelStore.prepareRuntime(applicationContext)
+        return VoskEngine(spec, ModelStore.dir(applicationContext, spec))
     }
 
     /** 60 seconds from about 10% in. Failing or timing out only means "not this engine". */

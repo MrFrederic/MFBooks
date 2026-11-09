@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,7 @@ import app.mfbooks.ui.text.TextImportHost
 import app.mfbooks.ui.text.TextImportState
 import app.mfbooks.ui.text.TextProblem
 import app.mfbooks.ui.text.languageChoices
+import app.mfbooks.ui.text.megabytes
 import app.mfbooks.ui.text.openReader
 import app.mfbooks.ui.text.rememberChapterStats
 import app.mfbooks.ui.text.rememberTextImport
@@ -113,7 +115,7 @@ private fun ColumnScope.RowState(book: Book, row: BookText, settings: Settings, 
     when (row.state) {
         TextState.ALIGNING -> MatchingCard(book, row, read, onManage)
         TextState.QUEUED -> Waiting(if (settings.matchWhen == MatchWhen.ANY) "Waiting to start" else "Waiting for charger", null, read, startNow, onManage)
-        TextState.PAUSED -> Waiting("Matching paused", row.error, read, startNow, onManage)
+        TextState.PAUSED -> if (row.error == Matching.NEEDS_VOSK) VoskNeeded(book.id, row.lang, read, onManage) else Waiting("Matching paused", row.error, read, startNow, onManage)
         TextState.NO_MATCH -> {
             Text("Text doesn't match the audio", style = MaterialTheme.typography.titleMedium)
             Body(row.error ?: "${percent(row.coverage)}% matched")
@@ -162,6 +164,23 @@ private fun ColumnScope.MatchingCard(book: Book, row: BookText, read: () -> Unit
     ChapterBarMap(stats, "$pct percent of the book is matched", Modifier.padding(top = 14.dp))
     left?.let { Body(it, Modifier.padding(top = 12.dp)) }
     PanelButtons("Read now", read, "Pause matching", { Matching.pause(ctx, book.id) })
+}
+
+@Composable
+private fun ColumnScope.VoskNeeded(bookId: String, lang: String, read: () -> Unit, onManage: () -> Unit) {
+    val ctx = LocalContext.current
+    val progress = Matching.downloads.collectAsState().value[lang]
+    val failed = lang in Matching.downloadFailed.collectAsState().value
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Download speech engine", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+        ManageIcon(onManage)
+    }
+    Body(when {
+        progress != null -> "Downloading, ${(progress * 100).toInt()}%"
+        failed -> "Download failed"
+        else -> megabytes(Matching.voskDownloadBytes(ctx, lang))
+    })
+    PanelButtons(if (failed) "Try again" else "Download", { if (progress == null) Matching.downloadVosk(ctx, lang, bookId) }, "Read now", read)
 }
 
 @Composable

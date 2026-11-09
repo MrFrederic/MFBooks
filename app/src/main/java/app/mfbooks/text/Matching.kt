@@ -2,11 +2,12 @@ package app.mfbooks.text
 
 import android.content.Context
 import app.mfbooks.MFBooksApp
-import app.mfbooks.data.SpeechEnginePref
 import app.mfbooks.data.TextState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SpeechModelInfo(val lang: String, val name: String, val sizeBytes: Long, val installed: Boolean)
@@ -14,6 +15,23 @@ class SpeechModelInfo(val lang: String, val name: String, val sizeBytes: Long, v
 /** The public face of the matching job, used by the UI. */
 object Matching {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** [app.mfbooks.data.BookText.error] while a book is waiting for the user to download Vosk. */
+    const val NEEDS_VOSK = "needs-vosk"
+    /** Language to fraction done, for each Vosk download in progress. */
+    val downloads = MutableStateFlow<Map<String, Float>>(emptyMap())
+    /** Languages whose last download failed. */
+    val downloadFailed = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Fetch Vosk for [lang], the only way it reaches the phone. [matchBook] continues that book's matching afterwards. */
+    fun downloadVosk(context: Context, lang: String, matchBook: String? = null) {
+        if (ModelStore.spec(lang) == null || lang in downloads.value) return
+        downloads.update { it + (lang to 0f) }
+        downloadFailed.update { it - lang }
+        VoskDownloadWorker.enqueue(context, lang, matchBook)
+    }
+
+    fun voskDownloadBytes(context: Context, lang: String): Long = ModelStore.spec(lang)?.let { ModelStore.downloadBytes(context, it) } ?: 0
 
     /** Queue matching for a book. [now] ignores the "run matching" constraint. */
     fun enqueue(context: Context, bookId: String, now: Boolean) {
@@ -62,19 +80,8 @@ object Matching {
     /** The phone has an on-device recogniser on Android 14+. Controls whether the Android choice is offered. */
     fun androidEngineAvailable(context: Context): Boolean = androidRecognizerAvailable(context)
 
-    /** Download size in bytes needed before matching can run in [lang], 0 if nothing is needed or the system handles it. */
-    suspend fun downloadNeeded(context: Context, lang: String): Long {
-        val spec = ModelStore.spec(lang) ?: return 0
-        if (ModelStore.installed(context, spec)) return 0
-        return when (MFBooksApp.get(context).prefs.now().speechEngine) {
-            SpeechEnginePref.VOSK -> spec.sizeBytes
-            SpeechEnginePref.ANDROID -> 0
-            SpeechEnginePref.AUTO -> spec.sizeBytes // the Android engine may still fail its probe and need Vosk: never download unannounced
-        }
-    }
-
     fun models(context: Context): List<SpeechModelInfo> =
-        ModelStore.specs.map { SpeechModelInfo(it.lang, it.name, it.sizeBytes, ModelStore.installed(context, it)) }
+        ModelStore.specs.map { val on = ModelStore.installed(context, it); SpeechModelInfo(it.lang, it.name, if (on) it.sizeBytes else ModelStore.downloadBytes(context, it), on) }
 
     fun deleteModel(context: Context, lang: String): Unit = ModelStore.delete(context, lang)
 }

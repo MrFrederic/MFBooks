@@ -144,4 +144,16 @@ class AlignLogicTest {
         assertFalse(File(dir, "evil.bin").exists())
         dir.deleteRecursively()
     }
+
+    @Test fun extractsOnlyThisProcessorsLibraries() {
+        val bytes = java.io.ByteArrayOutputStream().also { o -> java.util.zip.ZipOutputStream(o).use { z ->
+            for (name in listOf("classes.jar", "jni/arm64-v8a/libvosk.so", "jni/x86_64/libvosk.so", "jni/arm64-v8a/../../evil.so", "jni/arm64-v8a/notes.txt")) {
+                z.putNextEntry(java.util.zip.ZipEntry(name)); z.write(name.toByteArray()); z.closeEntry()
+            }
+        } }.toByteArray()
+        val dir = java.nio.file.Files.createTempDirectory("natives").toFile()
+        ModelStore.extractNatives(bytes.inputStream(), "arm64-v8a", dir)
+        assertEquals(setOf("libvosk.so", "evil.so"), dir.list()!!.toSet()) // flattened, so nothing can leave the directory
+        dir.deleteRecursively()
+    }
 }

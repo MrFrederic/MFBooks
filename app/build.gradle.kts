@@ -14,7 +14,6 @@ android {
         targetSdk = 36
         versionCode = 5
         versionName = "0.2.2"
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") } // Vosk's native libraries are the only ones in the app
     }
     // Release signing from env (CI secrets); unsigned release build when absent.
     val ks = System.getenv("SIGNING_KEYSTORE")
@@ -26,6 +25,8 @@ android {
     }
     buildTypes { release { signingConfig = signingConfigs.findByName("release") } }
     buildFeatures { compose = true }
+    // Vosk is an optional download (text/ModelStore.kt): its classes ship, its native libraries don't.
+    packaging { jniLibs { excludes += setOf("**/libvosk.so", "**/libjnidispatch.so") } }
 }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }

@@ -10,7 +10,7 @@
 |---|---|
 | Where is the text parsed? | `:shared` Kotlin parser, used by the app and the server. |
 | Where is text matched to audio? | On the phone first, as a background job. The server only stores the result. A server engine is added only if the phone is too slow (§1.11). |
-| How is it matched? | On-device speech recognition with word timings, then a text alignment that tolerates recognition errors. Android's own recogniser is tried first where it qualifies (Android 14+). Vosk covers every other phone. |
+| How is it matched? | On-device speech recognition with word timings, then a text alignment that tolerates recognition errors. Automatic uses Vosk if the user downloaded it, otherwise Android's own recogniser where it qualifies (Android 14+), otherwise it offers the Vosk download. |
 | Is AICore used? | Not for matching. It blocks background use and only gives word timings on real-time streams (§1.6). |
 | What is stored? | One immutable text file and one sync map that links word positions to audio time. |
 | What happens before matching finishes? | The reader works at once with an approximate sync and sharpens as matching progresses. |
@@ -156,7 +156,7 @@ The transcript is independent of the ebook. It is kept so a different edition of
 | Engine | Needs | Word timings | File input | Long background job | Use |
 |---|---|---|---|---|---|
 | **Android on-device** `SpeechRecognizer.createOnDeviceSpeechRecognizer` | Android 14+ for timings. A language pack for ru-RU or en-US. | Yes, `EXTRA_REQUEST_WORD_TIMING`, API 34 | Yes, `EXTRA_AUDIO_SOURCE`, API 33 | Not documented, spike must test | First choice where it passes the probe |
-| **Vosk small** | Any supported phone. A 40–45 MB model. | Yes | We feed PCM directly | Yes | Fallback, and Android 10 to 13 |
+| **Vosk small** | Any supported phone. An optional download: 14 MB of native libraries plus a 40–45 MB model per language. None of it ships in the APK. | Yes | We feed PCM directly | Yes | Used by Automatic whenever it is installed |
 | **ML Kit GenAI Advanced** (AICore) | Pixel 10 or 11, or listed flagship chips. Locked bootloader. | Streaming only | ONE_SHOT file input throws if timings are on | No. GenAI inference is foreground-only, with a per-app quota. | Not used |
 | **ML Kit GenAI Basic** | API 31+. Russian is beta. Alpha library. | Streaming only | Same limit | Unconfirmed | Not used. It's described as similar to `SpeechRecognizer`, which needs no dependency. |
 
@@ -178,7 +178,7 @@ The transcript is independent of the ebook. It is kept so a different edition of
 
 **Steps:**
 
-1. **Engine and model.** Apply the speech engine setting. Vosk downloads on first use after the user confirms: `vosk-model-small-ru-0.22` (45 MB) or `vosk-model-small-en-us-0.15` (40 MB), both Apache 2.0, with a pinned SHA-256. Android language packs download through the system.
+1. **Engine and model.** Apply the speech engine setting. The job never downloads Vosk. If it needs Vosk and it is missing, the book card offers the download. Settings → Reading → Speech models downloads and deletes it per language, and deleting the last language removes the libraries too. Models are `vosk-model-small-ru-0.22` (45 MB) and `vosk-model-small-en-us-0.15` (40 MB), Apache 2.0. The native libraries come from the Vosk and JNA AARs on Maven Central. All of these are checked against pinned SHA-256 hashes. Android language packs download through the system.
 2. **Decode.** `MediaExtractor` and `MediaCodec` to 16 kHz mono, reusing the convert decoder and `Resampler`. Remote tracks open with the Bearer header already used for playback.
 3. **Order.** Start at the listener's current position, go forward, then wrap around. The part of the book they're about to hear gets good sync first.
 4. **Recognise.** Append words to the transcript with a checkpoint per 5 minutes of audio. Work resumes from the last checkpoint.
@@ -200,7 +200,7 @@ Required check: one `:shared` unit test that corrupts a known word/time list (ra
 
 - Android 15+ allows `mediaProcessing` foreground services 6 hours per 24 hours, and the same again for `dataSync`, per type. The budget resets when the user opens the app. A long book can hit this, so `onStopped` must checkpoint and reschedule. Do not treat it as a failure.
 - A small Vosk model needs about 300 MB of memory while running. Run one or two recognisers. Back off on `PowerManager` thermal status `SEVERE` with either engine.
-- Vosk ships native libraries, the app's first. Limit ABIs to `arm64-v8a` and `x86_64` (emulator) and measure the APK increase in the spike. If the Android engine passes on the phones that matter, Vosk can wait.
+- Vosk's Java classes ship, but `libvosk.so` and `libjnidispatch.so` are excluded from the APK and loaded from app storage. The AAR versions in `ModelStore` must match `app/build.gradle.kts`.
 
 **Default constraints:** while charging, or above the existing battery threshold. The user can choose "Start now".
 
@@ -297,7 +297,6 @@ Text works for any book with a `serverId`, including books whose audio was never
 | Battery | Finishes on one overnight charge without thermal throttling |
 | Word timing error | Median under 300 ms |
 | Coverage on a matching edition | At least 90% of narrated text |
-| APK size increase (Vosk only) | Under 30 MB for `arm64-v8a` |
 
 **First results, Android 14 x86_64 emulator, 2026-11-09:**
 

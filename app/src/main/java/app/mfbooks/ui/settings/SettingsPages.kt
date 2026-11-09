@@ -19,6 +19,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -292,17 +294,26 @@ private fun Env.SpeechModelsRow(shapes: ListItemShapes) {
 private fun SpeechModelsSheet(ctx: Context, onChanged: () -> Unit, dismiss: () -> Unit) {
     var rev by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    val installed = remember(rev) { Matching.models(ctx).filter { it.installed } }
+    val downloads by Matching.downloads.collectAsState()
+    val failed by Matching.downloadFailed.collectAsState()
+    LaunchedEffect(downloads.size) { rev++; onChanged() } // one finished
+    val models = remember(rev) { Matching.models(ctx) }
     SheetBase(dismiss, "Speech models") {
-        if (installed.isEmpty()) Text("None", style = MaterialTheme.typography.bodyLarge)
-        installed.forEach { m ->
+        models.forEach { m ->
+            val progress = downloads[m.lang]
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(langName(m.lang), style = MaterialTheme.typography.bodyLarge)
-                    Text(megabytes(m.sizeBytes), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(when {
+                        progress != null -> "Downloading, ${(progress * 100).toInt()}%"
+                        m.lang in failed -> "Download failed"
+                        else -> megabytes(m.sizeBytes)
+                    }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton({ scope.launch { withContext(Dispatchers.IO) { Matching.deleteModel(ctx, m.lang) }; rev++; onChanged() } }) {
+                if (m.installed) IconButton({ scope.launch { withContext(Dispatchers.IO) { Matching.deleteModel(ctx, m.lang) }; rev++; onChanged() } }) {
                     Icon(Icons.Rounded.Delete, "Delete ${langName(m.lang)} model")
+                } else if (progress == null) IconButton({ Matching.downloadVosk(ctx, m.lang) }) {
+                    Icon(Icons.Rounded.Download, "Download ${langName(m.lang)} model")
                 }
             }
         }

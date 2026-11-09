@@ -67,9 +67,6 @@ fun ReviewSheet(book: Book, parsed: ParsedText, onAdd: (lang: String, now: Boole
     val spoken by produceState<String?>(null) {
         value = try { Matching.detectSpokenLanguage(ctx, book.id) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
     }
-    val download by produceState(0L, lang) {
-        value = try { Matching.downloadNeeded(ctx, lang) } catch (e: CancellationException) { throw e } catch (e: Exception) { 0L }
-    }
     val matchable = lang in MATCHABLE_LANGS
     val mismatch = spoken?.takeIf { it != lang && !continued }
 
@@ -92,8 +89,6 @@ fun ReviewSheet(book: Book, parsed: ParsedText, onAdd: (lang: String, now: Boole
                 MatchOption("While charging", !now) { now = false }
                 MatchOption("Start now", now) { now = true }
             }
-            if (download > 0) Text("${megabytes(download)} speech model download", Modifier.padding(horizontal = 4.dp),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else Text("Word matching isn't available for this language yet", Modifier.padding(horizontal = 4.dp),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
