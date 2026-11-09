@@ -111,9 +111,8 @@ fun TextImportHost(state: TextImportState, book: Book) {
     ReviewSheet(book, p, onAdd = { lang, now, match -> state.add(p, lang, now, match) }, onReplace = { state.close(); state.pick() }, onDismiss = state::close)
 }
 
-fun openReader(app: MFBooksApp, bookId: String) {
-    if (app.player.state.value.book?.id != bookId) app.player.playBook(bookId)
-    ReaderNav.openText.value = bookId
+fun openReader(bookId: String) {
+    ReaderNav.openText.value = bookId // Root loads the book if another one is playing
 }
 
 /** Primary and secondary button side by side, as on every Text panel card. */

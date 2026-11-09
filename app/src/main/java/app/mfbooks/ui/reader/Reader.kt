@@ -127,6 +127,8 @@ import app.mfbooks.text.BlockKind
 import app.mfbooks.text.BookTextDoc
 import app.mfbooks.text.RangeKind
 import app.mfbooks.text.SyncDoc
+import app.mfbooks.text.Approximate
+import app.mfbooks.text.ChapterRef
 import app.mfbooks.text.SyncMap
 import app.mfbooks.text.SyncPosition
 import app.mfbooks.text.SyncTrack
@@ -465,8 +467,14 @@ private fun ReaderBody(
 
     LaunchedEffect(book.id, text.syncSha, tracks) {
         val (sd, m) = withContext(Dispatchers.Default) {
-            val sd = app.textStore.readSync(book.id)
-            sd to sd?.let { SyncMap.of(it, tracks.map { t -> SyncTrack(t.fileName, t.durationMs) }) }
+            val current = tracks.map { t -> SyncTrack(t.fileName, t.durationMs) }
+            val saved = app.textStore.readSync(book.id)
+            saved?.let { SyncMap.of(it, current) }?.let { return@withContext saved to it }
+            // The audio changed under this map: stay readable with an estimate. The saved map and transcript stay on disk.
+            val doc = app.textStore.readText(book.id) ?: return@withContext saved to null
+            val chapters = app.db.library().chapters(book.id).map { ChapterRef(it.title, it.startInBookMs.toInt()) }
+            val estimate = Approximate.build(doc, text.textSha, current, chapters)
+            estimate to SyncMap.of(estimate, current)
         }
         ra.syncDoc = sd
         ra.map = m

@@ -59,7 +59,7 @@ object Matching {
         return when (MFBooksApp.get(context).prefs.now().speechEngine) {
             SpeechEnginePref.VOSK -> spec.sizeBytes
             SpeechEnginePref.ANDROID -> 0
-            SpeechEnginePref.AUTO -> if (androidEngineAvailable(context)) 0 else spec.sizeBytes
+            SpeechEnginePref.AUTO -> spec.sizeBytes // the Android engine may still fail its probe and need Vosk: never download unannounced
         }
     }
 

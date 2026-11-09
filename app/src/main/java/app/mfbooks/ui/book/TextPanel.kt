@@ -108,7 +108,7 @@ private fun ColumnScope.RowState(book: Book, row: BookText, settings: Settings, 
     val app = app(ctx)
     val scope = rememberCoroutineScope()
     var language by remember { mutableStateOf(false) }
-    val read = { openReader(app, book.id) }
+    val read = { openReader(book.id) }
     val startNow = { Matching.enqueue(ctx, book.id, true) }
     when (row.state) {
         TextState.ALIGNING -> MatchingCard(book, row, read, onManage)

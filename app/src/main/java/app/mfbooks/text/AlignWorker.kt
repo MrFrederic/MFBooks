@@ -127,7 +127,7 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
                         if (total - alignedAt >= ALIGN_EVERY_MS) {
                             val sync = align()
                             if (sync != null && Outcome.stopEarly(alignedAt, total, Outcome.matchedRatio(sync.ranges))) {
-                                setState(TextState.NO_MATCH, NO_MATCH_TEXT)
+                                setState(TextState.NO_MATCH, "${(Outcome.matchedRatio(sync.ranges) * 100).toInt()}% of the first hour matched")
                                 return Result.success()
                             }
                             alignedAt = total
@@ -143,7 +143,7 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
 
         val sync = align() ?: return stop("Couldn't align the text with the audio")
         val state = if (sync.coverage() >= Outcome.READY_COVERAGE) TextState.READY else TextState.NO_MATCH
-        setState(state, if (state == TextState.NO_MATCH) NO_MATCH_TEXT else null)
+        setState(state, null) // the card shows coverage
         return Result.success(workDataOf(OUT_MESSAGE to state))
     }
 
@@ -282,7 +282,6 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         const val ALIGN_EVERY_MS = 30 * 60_000
         private const val PROBE_MS = 60_000L
         private const val PROBE_TIMEOUT_MS = 90_000L
-        private const val NO_MATCH_TEXT = "Text doesn't match the audio"
 
         private fun name(bookId: String) = "align-$bookId"
 
