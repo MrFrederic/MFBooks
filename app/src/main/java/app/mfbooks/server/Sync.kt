@@ -101,7 +101,7 @@ object Sync {
         _status.value = SyncStatus()
         Cloud.clear(context)
         // Books that only stream from the server can't play without it.
-        scope.launch { MFBooksApp.get(context).db.let { db -> db.sync().syncedBooks().filter { it.rootUri == CLOUD_ROOT }.forEach { db.library().removeBook(it.id) } } }
+        scope.launch { MFBooksApp.get(context).db.let { db -> db.sync().syncedBooks().filter { it.rootUri == CLOUD_ROOT }.forEach { db.library().removeBook(it.id); MFBooksApp.get(context).textStore.forget(it.id) } } }
         Live.update()
     }
 
@@ -274,7 +274,7 @@ object Sync {
         when (c.kind) { // a statement on purpose: kinds this version doesn't know are ignored, and `text` is handled in [apply]
             Kind.BOOK -> {
                 local ?: return // unknown here: a cloud copy shows up through Cloud.refresh, anything else stays on the server
-                if (c.deleted) { if (local.rootUri == CLOUD_ROOT) lib.removeBook(local.id) else dao.setServerId(local.id, null); return }
+                if (c.deleted) { if (local.rootUri == CLOUD_ROOT) { lib.removeBook(local.id); app.textStore.forget(local.id) } else dao.setServerId(local.id, null); return }
                 dao.applyBookState(local.id, d.str("state")?.let { s -> BookState.entries.firstOrNull { it.name == s } } ?: local.state,
                     if (d.containsKey("lastPlayedAt")) d.num("lastPlayedAt")?.toLong() else local.lastPlayedAt,
                     (d["hidden"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: local.hidden,

@@ -237,6 +237,7 @@ object Transfer {
             val newId = sha1(folder.toString()).take(16)
             val rel = r.query(folder, arrayOf(Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null } ?: book.title
             Covers.file(appCtx, id).takeIf { it.exists() }?.renameTo(Covers.file(appCtx, newId))
+            app.textStore.moveFiles(id, newId)
             app.db.sync().rekey(id, newId, root!!.uri, folder.toString(), rel)
             lib.book(newId)?.let { b -> if (b.coverUri != null) lib.upsertBook(b.copy(coverUri = Uri.fromFile(Covers.file(appCtx, newId)).toString())) }
         }

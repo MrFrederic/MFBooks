@@ -146,6 +146,9 @@ class TextStore(private val app: MFBooksApp) {
     /** The book is gone from the library: drop the local copy only, its folder (if any) has moved or vanished. */
     suspend fun forget(bookId: String): Unit = locked(bookId) { forgetFiles(bookId) }
 
+    /** A cloud-only book became a folder book and got a new id. Call before the row moves. */
+    fun moveFiles(old: String, new: String) { File(app.filesDir, "text/$old").takeIf { it.exists() }?.renameTo(File(app.filesDir, "text/$new")) }
+
     private suspend fun forgetFiles(bookId: String) {
         File(app.filesDir, "text/$bookId").deleteRecursively()
         dao.delete(bookId)

@@ -73,7 +73,7 @@ object Cloud {
         for ((sid, c) in map) if (c.complete && dao.bookByServerId(sid) == null) runCatching { addCloudBook(app, sid) }
             .onFailure { android.util.Log.w("Cloud", "can't add $sid", it) }
         // A cloud-only book whose cloud copy was deleted is gone.
-        for (b in dao.syncedBooks()) if (b.rootUri == CLOUD_ROOT && b.serverId !in map) lib.removeBook(b.id)
+        for (b in dao.syncedBooks()) if (b.rootUri == CLOUD_ROOT && b.serverId !in map) { lib.removeBook(b.id); app.textStore.forget(b.id) }
         // Covers for every synced book, so the web player shows phone-only books with their art too.
         val noCover = list.filter { it.str("cover") != "true" }.mapNotNull { it.str("id") }.toSet()
         for (b in dao.syncedBooks()) {
