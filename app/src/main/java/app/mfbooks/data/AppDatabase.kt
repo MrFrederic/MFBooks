@@ -117,6 +117,22 @@ interface UserDataDao {
 }
 
 @Dao
+interface TextDao {
+    @Query("SELECT * FROM BookText WHERE bookId = :bookId") fun textFlow(bookId: String): Flow<BookText?>
+    @Query("SELECT * FROM BookText WHERE bookId = :bookId") suspend fun text(bookId: String): BookText?
+    @Query("SELECT * FROM BookText") suspend fun all(): List<BookText>
+    @Query("SELECT * FROM BookText WHERE state IN ('QUEUED', 'ALIGNING')") suspend fun active(): List<BookText>
+    @Upsert suspend fun upsert(t: BookText)
+    @Query("DELETE FROM BookText WHERE bookId = :bookId") suspend fun delete(bookId: String)
+    @Query("UPDATE BookText SET state = :state, error = :error, updatedAt = :at WHERE bookId = :bookId")
+    suspend fun setState(bookId: String, state: String, error: String?, at: Long)
+    @Query("UPDATE BookText SET syncTier = :tier, coverage = :coverage, syncedAudioMs = :syncedAudioMs, syncSha = :syncSha, engine = :engine, updatedAt = :at WHERE bookId = :bookId")
+    suspend fun setSync(bookId: String, tier: String, coverage: Float, syncedAudioMs: Long, syncSha: String?, engine: String?, at: Long)
+    @Query("UPDATE BookText SET offsetMs = :offsetMs, updatedAt = :at WHERE bookId = :bookId") suspend fun setOffset(bookId: String, offsetMs: Int, at: Long)
+    @Query("UPDATE BookText SET lang = :lang, updatedAt = :at WHERE bookId = :bookId") suspend fun setLang(bookId: String, lang: String, at: Long)
+}
+
+@Dao
 interface SyncDao {
     @Query("SELECT * FROM PendingChange ORDER BY id") suspend fun pending(): List<PendingChange>
     @Query("SELECT COALESCE(MAX(id), 0) FROM PendingChange") suspend fun maxPending(): Long
@@ -160,12 +176,13 @@ interface SyncDao {
     @Query("UPDATE Bookmark SET bookId = :new WHERE bookId = :old") suspend fun moveBookmarks(old: String, new: String)
     @Query("UPDATE HistoryEvent SET bookId = :new WHERE bookId = :old") suspend fun moveHistory(old: String, new: String)
     @Query("UPDATE ListeningSession SET bookId = :new WHERE bookId = :old") suspend fun moveSessions(old: String, new: String)
+    @Query("UPDATE BookText SET bookId = :new WHERE bookId = :old") suspend fun moveText(old: String, new: String)
 
     /** A downloaded cloud-only book becomes a folder book: give it the id the scanner computes for that folder. */
     @Transaction
     suspend fun rekey(old: String, new: String, root: String, folder: String, rel: String) {
         moveBookRow(old, new, root, folder, rel); moveTracks(old, new); moveChapters(old, new); moveProgress(old, new)
-        moveSettings(old, new); moveBookmarks(old, new); moveHistory(old, new); moveSessions(old, new)
+        moveSettings(old, new); moveBookmarks(old, new); moveHistory(old, new); moveSessions(old, new); moveText(old, new)
     }
 }
 
@@ -188,6 +205,10 @@ val SYNC_TRIGGERS = listOf(
     trigger("history_i", "INSERT ON HistoryEvent", "history", "NEW.uuid"),
     trigger("session_i", "INSERT ON ListeningSession", "session", "NEW.uuid"),
     trigger("session_u", "UPDATE ON ListeningSession", "session", "NEW.uuid"),
+    trigger("text_i", "INSERT ON BookText", "text", "NEW.bookId"),
+    trigger("text_u", "UPDATE OF textSha, syncSha, offsetMs, lang ON BookText", "text", "NEW.bookId",
+        "AND (OLD.textSha IS NOT NEW.textSha OR OLD.syncSha IS NOT NEW.syncSha OR OLD.offsetMs IS NOT NEW.offsetMs OR OLD.lang IS NOT NEW.lang)"),
+    trigger("text_d", "DELETE ON BookText", "text", "OLD.bookId"),
 )
 
 /** v2: MFBooks Server sync (server ids, uuids, the change queue). */
@@ -213,6 +234,13 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/** v3: read-along text. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS BookText (bookId TEXT NOT NULL, sourceName TEXT NOT NULL, format TEXT NOT NULL, lang TEXT NOT NULL, textSha TEXT NOT NULL, words INTEGER NOT NULL, state TEXT NOT NULL, syncTier TEXT NOT NULL, coverage REAL NOT NULL, syncedAudioMs INTEGER NOT NULL, offsetMs INTEGER NOT NULL, syncSha TEXT, engine TEXT, error TEXT, updatedAt INTEGER NOT NULL, PRIMARY KEY(bookId))")
+    }
+}
+
 /** Triggers aren't part of Room's schema: (re)create them on every open, which also covers fresh installs. */
 val SYNC_CALLBACK = object : RoomDatabase.Callback() {
     override fun onOpen(db: SupportSQLiteDatabase) = SYNC_TRIGGERS.forEach(db::execSQL)
@@ -220,12 +248,13 @@ val SYNC_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [RootFolder::class, Book::class, Track::class, Chapter::class, BookProgress::class,
-        BookSettings::class, Bookmark::class, HistoryEvent::class, ListeningSession::class, PendingChange::class, SyncSeen::class],
-    version = 2,
+        BookSettings::class, Bookmark::class, HistoryEvent::class, ListeningSession::class, PendingChange::class, SyncSeen::class, BookText::class],
+    version = 3,
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun library(): LibraryDao
     abstract fun userData(): UserDataDao
     abstract fun sync(): SyncDao
+    abstract fun text(): TextDao
 }

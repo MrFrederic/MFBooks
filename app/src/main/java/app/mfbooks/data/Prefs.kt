@@ -19,6 +19,11 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK, BLACK }
 enum class ColorSource { SYSTEM, COVER }
 enum class EndOfBook { NOTHING, SHOW_LIBRARY, NEXT_BOOK, NEXT_BOOK_SAME_SETTINGS }
 enum class ProgressFormat { TIME, TIME_PERCENT, TIME_LEFT, TIME_PERCENT_LEFT, FILES }
+enum class ReaderFont { LITERATA, SERIF, SANS }
+enum class ReaderDensity { COMPACT, NORMAL, RELAXED }
+enum class HighlightStyle { PLAYHEAD, BAND, WORD, OFF }
+enum class MatchWhen { CHARGING, CHARGING_OR_BATTERY, ANY }
+enum class SpeechEnginePref { AUTO, ANDROID, VOSK }
 
 /**
  * Next/previous mapping for external surfaces (§5.6). Values are command names from [app.mfbooks.playback.Commands]
@@ -60,6 +65,20 @@ data class Settings(
     val libraryView: String = "GRID",      // GRID / LIST / FOLDERS
     val librarySort: String = "TITLE",     // TITLE / AUTHOR / RECENT / ADDED / LENGTH / PATH
     val lockControls: Boolean = false,     // player "lock": only play/pause (and chapter list taps) stay active
+    val readerFont: ReaderFont = ReaderFont.LITERATA,
+    val readerSizeSp: Int = 19,            // 14..28
+    val readerLineSpacing: ReaderDensity = ReaderDensity.NORMAL,
+    val readerMargins: ReaderDensity = ReaderDensity.NORMAL,
+    val readerJustify: Boolean = false,
+    val highlightStyle: HighlightStyle = HighlightStyle.PLAYHEAD,
+    val dimNarrated: Boolean = true,
+    val followNarration: Boolean = true,
+    val keepScreenReading: Boolean = true,
+    val tapToSeek: Boolean = true,
+    val matchWhen: MatchWhen = MatchWhen.CHARGING,
+    val speechEngine: SpeechEnginePref = SpeechEnginePref.AUTO,
+    val offerFolderText: Boolean = true,
+    val saveTextInFolders: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -100,6 +119,20 @@ class Prefs(private val context: Context) {
         val libraryView = stringPreferencesKey("libraryView")
         val librarySort = stringPreferencesKey("librarySort")
         val lockControls = booleanPreferencesKey("lockControls")
+        val readerFont = stringPreferencesKey("readerFont")
+        val readerSizeSp = intPreferencesKey("readerSizeSp")
+        val readerLineSpacing = stringPreferencesKey("readerLineSpacing")
+        val readerMargins = stringPreferencesKey("readerMargins")
+        val readerJustify = booleanPreferencesKey("readerJustify")
+        val highlightStyle = stringPreferencesKey("highlightStyle")
+        val dimNarrated = booleanPreferencesKey("dimNarrated")
+        val followNarration = booleanPreferencesKey("followNarration")
+        val keepScreenReading = booleanPreferencesKey("keepScreenReading")
+        val tapToSeek = booleanPreferencesKey("tapToSeek")
+        val matchWhen = stringPreferencesKey("matchWhen")
+        val speechEngine = stringPreferencesKey("speechEngine")
+        val offerFolderText = booleanPreferencesKey("offerFolderText")
+        val saveTextInFolders = booleanPreferencesKey("saveTextInFolders")
         val convertSavedBytes = longPreferencesKey("convertSavedBytes")
     }
 
@@ -156,6 +189,20 @@ class Prefs(private val context: Context) {
             libraryView = this[K.libraryView] ?: d.libraryView,
             librarySort = this[K.librarySort] ?: d.librarySort,
             lockControls = this[K.lockControls] ?: d.lockControls,
+            readerFont = enum(K.readerFont, d.readerFont),
+            readerSizeSp = this[K.readerSizeSp] ?: d.readerSizeSp,
+            readerLineSpacing = enum(K.readerLineSpacing, d.readerLineSpacing),
+            readerMargins = enum(K.readerMargins, d.readerMargins),
+            readerJustify = this[K.readerJustify] ?: d.readerJustify,
+            highlightStyle = enum(K.highlightStyle, d.highlightStyle),
+            dimNarrated = this[K.dimNarrated] ?: d.dimNarrated,
+            followNarration = this[K.followNarration] ?: d.followNarration,
+            keepScreenReading = this[K.keepScreenReading] ?: d.keepScreenReading,
+            tapToSeek = this[K.tapToSeek] ?: d.tapToSeek,
+            matchWhen = enum(K.matchWhen, d.matchWhen),
+            speechEngine = enum(K.speechEngine, d.speechEngine),
+            offerFolderText = this[K.offerFolderText] ?: d.offerFolderText,
+            saveTextInFolders = this[K.saveTextInFolders] ?: d.saveTextInFolders,
         )
     }
 
@@ -194,5 +241,19 @@ class Prefs(private val context: Context) {
         this[K.libraryView] = s.libraryView
         this[K.librarySort] = s.librarySort
         this[K.lockControls] = s.lockControls
+        this[K.readerFont] = s.readerFont.name
+        this[K.readerSizeSp] = s.readerSizeSp
+        this[K.readerLineSpacing] = s.readerLineSpacing.name
+        this[K.readerMargins] = s.readerMargins.name
+        this[K.readerJustify] = s.readerJustify
+        this[K.highlightStyle] = s.highlightStyle.name
+        this[K.dimNarrated] = s.dimNarrated
+        this[K.followNarration] = s.followNarration
+        this[K.keepScreenReading] = s.keepScreenReading
+        this[K.tapToSeek] = s.tapToSeek
+        this[K.matchWhen] = s.matchWhen.name
+        this[K.speechEngine] = s.speechEngine.name
+        this[K.offerFolderText] = s.offerFolderText
+        this[K.saveTextInFolders] = s.saveTextInFolders
     }
 }

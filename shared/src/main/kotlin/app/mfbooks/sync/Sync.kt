@@ -42,7 +42,8 @@ object Kind {
     const val HISTORY = "history"
     const val SESSION = "session"
     const val APP = "app_settings"
-    val ALL = setOf(BOOK, PROGRESS, SETTINGS, BOOKMARK, HISTORY, SESSION, APP)
+    const val TEXT = "text"
+    val ALL = setOf(BOOK, PROGRESS, SETTINGS, BOOKMARK, HISTORY, SESSION, APP, TEXT)
 }
 
 // Payloads, field for field with the app's Room entities (minus device-only fields).
@@ -93,6 +94,13 @@ data class HistoryData(val action: String, val trackIndex: Int, val positionMs: 
 
 @Serializable
 data class SessionData(val bookTitle: String, val bookPath: String = "", val startedAt: Long, val listenedMs: Long)
+
+/** One per book. The bytes travel over `/books/{id}/text/...`, this record says which version is current. */
+@Serializable
+data class TextData(
+    val textSha: String, val syncSha: String? = null, val lang: String, val words: Int = 0, val tier: String,
+    val coverage: Float = 0f, val offsetMs: Int = 0, val sourceName: String,
+)
 
 val SyncJson = Json { ignoreUnknownKeys = true; explicitNulls = true; encodeDefaults = true }
 

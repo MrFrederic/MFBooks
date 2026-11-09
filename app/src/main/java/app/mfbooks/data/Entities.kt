@@ -105,6 +105,30 @@ data class ListeningSession(
     val uuid: String = UUID.randomUUID().toString(),
 )
 
+object TextState {
+    const val PARSED = "PARSED"; const val QUEUED = "QUEUED"; const val ALIGNING = "ALIGNING"; const val PAUSED = "PAUSED"
+    const val READY = "READY"; const val NO_MATCH = "NO_MATCH"; const val AUDIO_CHANGED = "AUDIO_CHANGED"
+}
+
+/** A book's text, at most one per book. The files live in [app.mfbooks.text.TextStore]. */
+@Entity
+data class BookText(
+    @PrimaryKey val bookId: String,
+    val sourceName: String, val format: String,
+    val lang: String,                  // "ru", "en"
+    val textSha: String,
+    val words: Int,
+    val state: String,                 // [TextState]
+    val syncTier: String,              // [app.mfbooks.text.SyncTier]
+    val coverage: Float,               // fraction of the text with word-level timing
+    val syncedAudioMs: Long,           // audio transcribed so far
+    val offsetMs: Int = 0,             // user's nudge, added to playback time
+    val syncSha: String? = null,
+    val engine: String? = null,        // "android-ru-RU", "vosk-small-ru-0.22"
+    val error: String? = null,         // why the job paused or stopped, shown to the user
+    val updatedAt: Long,
+)
+
 /**
  * The sync queue: SQL triggers (see [SYNC_TRIGGERS]) add a row for every write the server should hear about, so no
  * call site has to remember. [tbl] is the sync kind, [key] the local book id or the row's uuid.

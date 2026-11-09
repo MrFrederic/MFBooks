@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.room.Room
 import app.mfbooks.data.AppDatabase
 import app.mfbooks.data.MIGRATION_1_2
+import app.mfbooks.data.MIGRATION_2_3
 import app.mfbooks.data.SYNC_CALLBACK
 import app.mfbooks.data.Prefs
 import app.mfbooks.library.LibraryScanner
@@ -11,10 +12,11 @@ import app.mfbooks.playback.PlayerConnection
 
 /** Manual singletons (no DI). Access with `MFBooksApp.get(context)` or `context.applicationContext as MFBooksApp`. */
 class MFBooksApp : Application() {
-    val db by lazy { Room.databaseBuilder(this, AppDatabase::class.java, "mfbooks.db").addMigrations(MIGRATION_1_2).addCallback(SYNC_CALLBACK).fallbackToDestructiveMigration(true).build() }
+    val db by lazy { Room.databaseBuilder(this, AppDatabase::class.java, "mfbooks.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).addCallback(SYNC_CALLBACK).fallbackToDestructiveMigration(true).build() }
     val prefs by lazy { Prefs(this) }
     val scanner by lazy { LibraryScanner(this) }
     val player by lazy { PlayerConnection(this) }
+    val textStore by lazy { app.mfbooks.text.TextStore(this) }
 
     override fun onCreate() {
         super.onCreate()

@@ -12,6 +12,7 @@ kotlin { compilerOptions { jvmTarget = JvmTarget.JVM_11 } }
 dependencies {
     api(libs.serialization.json)
     implementation(libs.juniversalchardet)
+    implementation(libs.jsoup)
     compileOnly(libs.json) // Android ships org.json; the server adds the jar
     testImplementation(libs.junit)
     testImplementation(libs.json)
