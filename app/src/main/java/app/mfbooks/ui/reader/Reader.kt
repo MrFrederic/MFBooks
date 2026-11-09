@@ -23,6 +23,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,7 +38,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -567,7 +567,7 @@ private fun ReaderBody(
 
     Column(modifier) {
         AnimatedVisibility(ra.kind == RangeKind.APPROX && text.state != TextState.READY, Modifier.align(Alignment.CenterHorizontally)) {
-            Surface(Modifier.padding(top = 4.dp, bottom = 2.dp).height(32.dp), RoundedCornerShape(16.dp), cs.secondaryContainer, cs.onSecondaryContainer) {
+            Surface(Modifier.padding(top = 4.dp, bottom = 2.dp).height(32.dp), CircleShape, cs.secondaryContainer, cs.onSecondaryContainer) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator({ text.coverage.coerceIn(0f, 1f) }, Modifier.size(16.dp), cs.primary, 3.dp, cs.onSecondaryContainer.copy(alpha = 0.3f))
                     Text("Approximate", style = MaterialTheme.typography.labelLarge)
@@ -601,7 +601,7 @@ private fun ReaderBody(
             val down by remember(ra) { derivedStateOf { ra.arrowDown() } }
             Column(Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 AnimatedVisibility(ra.kind == RangeKind.NONE && map != null, enter = fadeIn(), exit = fadeOut()) {
-                    Surface(Modifier.height(36.dp), RoundedCornerShape(18.dp), cs.surfaceContainerHighest, cs.onSurface) {
+                    Surface(Modifier.height(36.dp), CircleShape, cs.surfaceContainerHighest, cs.onSurface) {
                         Box(Modifier.padding(horizontal = 16.dp), Alignment.Center) { Text("Not in the text", style = MaterialTheme.typography.labelLarge) }
                     }
                 }

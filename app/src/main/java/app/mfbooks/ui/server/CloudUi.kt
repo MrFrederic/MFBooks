@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.AlertDialog
@@ -166,7 +165,7 @@ fun BookCloudPanel(book: Book, modifier: Modifier = Modifier) {
             val name = k.str("deviceName") ?: "Another device"
             val track = k.num("trackIndex")?.toInt() ?: 0
             val pos = k.num("positionInTrackMs")?.toLong() ?: 0
-            Column(Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(16.dp)) {
+            Column(Modifier.padding(top = 12.dp).fillMaxWidth().clip(MaterialTheme.shapes.largeIncreased).background(MaterialTheme.colorScheme.tertiaryContainer).padding(16.dp)) {
                 Text("Two positions for this book", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
                 Text("$name also moved it while offline: file ${track + 1} at ${formatClock(pos)}. Which one do you keep?",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
@@ -272,7 +271,7 @@ fun ConnectSheet(onDismiss: () -> Unit) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Connect", Modifier.padding(start = 8.dp, bottom = 4.dp), style = MaterialTheme.typography.headlineSmallEmphasized)
             val cs = MaterialTheme.colorScheme
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(cs.surfaceContainerHigh).padding(20.dp)) {
+            Column(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge).background(cs.surfaceContainerHigh).padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(remote?.name ?: "This phone", style = MaterialTheme.typography.titleLargeEmphasized, color = cs.primary)
@@ -304,7 +303,7 @@ fun ConnectSheet(onDismiss: () -> Unit) {
 
 @Composable
 private fun DeviceRow(name: String, kind: String, summary: String?, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 14.dp),
+    Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.largeIncreased).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Icon(kindIcon(kind), null, Modifier.size(28.dp))
         Column(Modifier.padding(start = 16.dp)) {

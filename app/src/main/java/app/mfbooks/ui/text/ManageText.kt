@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.mfbooks.data.BookText
 import app.mfbooks.text.Matching
 import app.mfbooks.ui.components.LocalChromePadding
+import app.mfbooks.ui.components.LocalGutter
 import app.mfbooks.ui.components.Panel
 import app.mfbooks.ui.components.app
 import app.mfbooks.ui.player.SheetBase
@@ -80,7 +81,7 @@ fun ManageTextScreen(bookId: String, onBack: () -> Unit) {
         )
         if (r == null) return@Column
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp).padding(top = 4.dp, bottom = LocalChromePadding.current + 16.dp),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = LocalGutter.current).padding(horizontal = 12.dp).padding(top = 4.dp, bottom = LocalChromePadding.current + 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             import.error?.let { TextProblem(it, import::pick, { import.error = null }, Modifier.fillMaxWidth()) }

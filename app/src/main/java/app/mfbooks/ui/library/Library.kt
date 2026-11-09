@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Sort
@@ -146,7 +145,7 @@ fun LibraryScreen(onOpenBook: (String) -> Unit, onSettings: () -> Unit, onServer
                     SyncIndicator(onServer)
                     Box {
                         IconButton({ sortMenu = true }) { Icon(Icons.AutoMirrored.Rounded.Sort, "Sort") }
-                        DropdownMenu(sortMenu, { sortMenu = false }, shape = RoundedCornerShape(20.dp)) {
+                        DropdownMenu(sortMenu, { sortMenu = false }, shape = MaterialTheme.shapes.largeIncreased) {
                             sorts.forEach { (k, label) ->
                                 DropdownMenuItem(
                                     text = { Text(label) },

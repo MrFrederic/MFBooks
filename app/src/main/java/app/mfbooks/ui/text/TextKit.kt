@@ -119,8 +119,8 @@ fun openReader(bookId: String) {
 @Composable
 fun PanelButtons(primary: String, onPrimary: () -> Unit, secondary: String, onSecondary: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onPrimary, Modifier.weight(1f).height(44.dp)) { Text(primary, maxLines = 1) }
-        FilledTonalButton(onSecondary, Modifier.weight(1f).height(44.dp)) { Text(secondary, maxLines = 1) }
+        Button(onPrimary, Modifier.weight(1f).height(48.dp)) { Text(primary, maxLines = 1) }
+        FilledTonalButton(onSecondary, Modifier.weight(1f).height(48.dp)) { Text(secondary, maxLines = 1) }
     }
 }
 
@@ -138,9 +138,9 @@ fun TextProblem(reason: Reason, onChoose: () -> Unit, onClose: () -> Unit, modif
                 },
                 Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
             )
-            IconButton(onClose, Modifier.size(32.dp)) { Icon(Icons.Rounded.Close, "Dismiss", Modifier.size(20.dp)) }
+            IconButton(onClose) { Icon(Icons.Rounded.Close, "Dismiss", Modifier.size(20.dp)) }
         }
-        FilledTonalButton(onChoose, Modifier.fillMaxWidth().padding(top = 14.dp).height(44.dp)) { Text("Choose another file") }
+        FilledTonalButton(onChoose, Modifier.fillMaxWidth().padding(top = 14.dp).height(48.dp)) { Text("Choose another file") }
     }
 }
 

@@ -54,6 +54,7 @@ import app.mfbooks.data.ListeningSession
 import app.mfbooks.ui.components.BookCover
 import app.mfbooks.ui.components.EmptyPlaceholder
 import app.mfbooks.ui.components.LocalChromePadding
+import app.mfbooks.ui.components.LocalGutter
 import app.mfbooks.ui.components.Panel
 import app.mfbooks.ui.components.app
 import app.mfbooks.ui.components.formatHm
@@ -89,7 +90,7 @@ fun StatsScreen(onSettings: () -> Unit) {
     val palette = listOf(cs.primary, cs.tertiary, cs.secondary, cs.inversePrimary, cs.error)
 
     Box(Modifier.fillMaxSize().glowBackdrop()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalChromePadding.current + 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = LocalGutter.current, end = LocalGutter.current, bottom = LocalChromePadding.current + 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 TopAppBar({ Text("Stats", style = MaterialTheme.typography.headlineSmallEmphasized) },
                     actions = { IconButton(onSettings) { Icon(Icons.Rounded.Settings, "Settings") } },

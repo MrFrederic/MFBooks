@@ -10,13 +10,13 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.FloatingToolbarDefaults
@@ -58,7 +58,7 @@ fun FloatingNav(entries: List<NavEntry>, selected: Int, onSelect: (Int) -> Unit,
     val measurer = rememberTextMeasurer()
     val labelW = with(LocalDensity.current) { entries.maxOf { measurer.measure(it.label, style, maxLines = 1).size.width }.toDp() }
     val wide = 16.dp + 24.dp + 8.dp + labelW + 16.dp
-    val pillX by animateDpAsState(Narrow * selected, spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow), label = "pillX")
+    val pillX by animateDpAsState(Narrow * selected, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "pillX")
     HorizontalFloatingToolbar(
         expanded = true,
         floatingActionButton = {
@@ -68,7 +68,7 @@ fun FloatingNav(entries: List<NavEntry>, selected: Int, onSelect: (Int) -> Unit,
         colors = FloatingToolbarDefaults.standardFloatingToolbarColors(),
     ) {
         Box(Modifier.height(Narrow)) {
-            Box(Modifier.offset(x = pillX).width(wide).height(Narrow).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(50)))
+            Box(Modifier.offset(x = pillX).width(wide).height(Narrow).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 entries.forEachIndexed { i, e ->
                     val on = i == selected
@@ -78,7 +78,7 @@ fun FloatingNav(entries: List<NavEntry>, selected: Int, onSelect: (Int) -> Unit,
                     Box(
                         Modifier
                             .width(lerp(Narrow, wide, f)).height(Narrow)
-                            .clip(RoundedCornerShape(50))
+                            .clip(CircleShape)
                             .clickable(role = Role.Tab) { onSelect(i) }
                             .semantics { this.selected = on; contentDescription = e.label }
                             .clipToBounds(),

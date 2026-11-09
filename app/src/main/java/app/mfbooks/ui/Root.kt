@@ -15,6 +15,17 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.Text
+import androidx.compose.ui.platform.LocalConfiguration
+import app.mfbooks.ui.components.LocalGutter
+import app.mfbooks.ui.components.ReadableWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -109,7 +120,11 @@ fun MFBooksRoot() {
 
 /** Every destination draws on an opaque background, so fades and the predictive-back preview never show the page below through it. */
 private fun NavGraphBuilder.page(route: String, arguments: List<NamedNavArgument> = emptyList(), content: @Composable (NavBackStackEntry) -> Unit) =
-    composable(route, arguments) { entry -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { content(entry) } }
+    composable(route, arguments) { entry ->
+        BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            CompositionLocalProvider(LocalGutter provides ((maxWidth - ReadableWidth) / 2).coerceAtLeast(0.dp)) { content(entry) }
+        }
+    }
 
 private val chromeSpring = spring<Float>(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)
 
@@ -126,7 +141,8 @@ private fun Modifier.collapse(shown: Float) = layout { m, c ->
  * Screens draw edge to edge; the floating chrome (snackbar, pill mini player, floating toolbar) sits on top at the
  * bottom and publishes its height through [LocalChromePadding] so lists can scroll clear of it. Chrome pieces appear
  * and vanish by growing/shrinking their own slot, so the mini player glides down with the toolbar instead of jumping.
- * ponytail: the floating toolbar is used on every width; no NavigationRail variant for tablets.
+ * From medium width up (tablets, unfolded foldables, landscape phones) a navigation rail replaces the floating toolbar
+ * and stays put on every page.
  */
 @Composable
 private fun Shell(hasBook: Boolean) {
@@ -138,6 +154,7 @@ private fun Shell(hasBook: Boolean) {
     val route = nav.currentBackStackEntryAsState().value?.destination?.route.orEmpty()
     val tab = tabs.indexOf(route)
     val searching = route == "search"
+    val rail = LocalConfiguration.current.screenWidthDp >= 600
 
     fun openBook(id: String) = nav.navigate("book/$id")
     fun openSettings() = nav.navigate("settings") { launchSingleTop = true }
@@ -169,7 +186,13 @@ private fun Shell(hasBook: Boolean) {
 
     CompositionLocalProvider(LocalSnackbar provides snackbar, LocalChromePadding provides chrome) {
         Box(Modifier.fillMaxSize()) {
-            NavHost(nav, startDestination = "home", modifier = Modifier.fillMaxSize(),
+            // Keep the last tab while the toolbar is leaving, so the pill doesn't jump on its way out.
+            var lastTab by remember { mutableIntStateOf(0) }
+            if (tab >= 0) lastTab = tab
+            // The rail sizes itself (it also clears the display cutout); pages and chrome start where it ends.
+            var railSize by remember { mutableStateOf(80.dp) }
+            val railWidth = if (rail) railSize else 0.dp
+            NavHost(nav, startDestination = "home", modifier = Modifier.fillMaxSize().padding(start = railWidth),
                 // Only the page on top fades; the one underneath stays opaque, so there is never a see-through mix of
                 // two pages. Predictive back uses the same fade instead of the default scale-down.
                 enterTransition = { fadeIn() }, exitTransition = { ExitTransition.KeepUntilTransitionsFinished },
@@ -197,7 +220,7 @@ private fun Shell(hasBook: Boolean) {
             Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars)
                 .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background.copy(alpha = 0.85f), Color.Transparent))))
             Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                Modifier.align(Alignment.BottomCenter).padding(start = railWidth).fillMaxWidth()
                     .onSizeChanged { chrome = with(density) { it.height.toDp() } }
                     .navigationBarsPadding().padding(bottom = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -207,12 +230,17 @@ private fun Shell(hasBook: Boolean) {
                 if (miniShown > 0f) Box(Modifier.collapse(miniShown)) {
                     MiniPlayer(onExpand = { expanded = true }, modifier = Modifier.padding(top = 10.dp).padding(horizontal = 12.dp))
                 }
-                val navShown by animateFloatAsState(if (tab >= 0) 1f else 0f, chromeSpring, label = "nav")
-                // Keep the last tab while the toolbar is leaving, so the pill doesn't jump on its way out.
-                var lastTab by remember { mutableIntStateOf(0) }
-                if (tab >= 0) lastTab = tab
+                val navShown by animateFloatAsState(if (tab >= 0 && !rail) 1f else 0f, chromeSpring, label = "nav")
                 if (navShown > 0f) Box(Modifier.collapse(navShown)) {
                     FloatingNav(navEntries, lastTab, { go(it) }, onSearch = ::openSearch, modifier = Modifier.padding(top = 10.dp))
+                }
+            }
+            if (rail) NavigationRail(
+                Modifier.align(Alignment.CenterStart).onSizeChanged { railSize = with(density) { it.width.toDp() } }, containerColor = MaterialTheme.colorScheme.background,
+                header = { FloatingActionButton(::openSearch, elevation = FloatingActionButtonDefaults.bottomAppBarFabElevation()) { Icon(Icons.Rounded.Search, "Search") } },
+            ) {
+                navEntries.forEachIndexed { i, e ->
+                    NavigationRailItem(i == lastTab, { go(i) }, { Icon(if (i == lastTab) e.selectedIcon else e.icon, null) }, label = { Text(e.label) })
                 }
             }
             AnimatedVisibility(expanded && hasBook, enter = slideInVertically { it }, exit = slideOutVertically { it }) {

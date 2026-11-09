@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearWavyProgressIndicator
@@ -42,7 +41,7 @@ fun VoskOffer(lang: String, modifier: Modifier = Modifier, matchBook: String? = 
     val progress = downloads[lang]
     val cs = MaterialTheme.colorScheme
     val builtIn = remember { Matching.androidEngineAvailable(ctx) }
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(cs.surfaceContainerHighest).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(cs.surfaceContainerHighest).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(if (builtIn) "Get better matching with Vosk" else "Download Vosk to match this book", style = MaterialTheme.typography.titleSmall)
         Text(
             if (builtIn) "Vosk matches books faster and finds more of the text than Android's built-in speech recognition. It runs entirely on your phone."

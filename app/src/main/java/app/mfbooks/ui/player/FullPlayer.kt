@@ -110,6 +110,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.material3.Snackbar
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -249,17 +255,25 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
         // A short glow only behind text: a full wash muddies the narrated and upcoming greys.
         if (!focus) Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - haze }.background(Brush.verticalGradient(0f to tint.copy(alpha = if (glow.dark) 0.45f else 0.3f), 0.36f to Color.Transparent)))
         if (!focus) CoverBackdrop(book.coverUri, book.seedColor, Modifier.fillMaxSize().graphicsLayer { alpha = haze })
-        Column(Modifier.fillMaxSize().statusBarsPadding().then(if (focus) Modifier else Modifier.navigationBarsPadding().padding(bottom = 8.dp))) {
+        // Landscape and tablets-on-their-side: the cover or text takes the left half, every control the right one.
+        val config = LocalConfiguration.current
+        val sideBySide = config.screenWidthDp >= 600 && config.screenWidthDp > config.screenHeightDp
+        // A phone on its side has no height to spare: the whole-book block goes and the transport shrinks.
+        val short = sideBySide && config.screenHeightDp < 480
+        val frame = Modifier.fillMaxSize().statusBarsPadding().then(if (focus) Modifier else Modifier.navigationBarsPadding().padding(bottom = 8.dp))
+        val header: @Composable ColumnScope.() -> Unit = {
             AnimatedVisibility(focus, enter = blockIn, exit = blockOut) {
                 FocusHeader(chapterTitle, !locked, onExit = { focus = false }, onReadingSettings = { sheet = Sheet.Reading })
             }
+        }
+        val top: @Composable ColumnScope.() -> Unit = {
             AnimatedVisibility(!focus, enter = blockIn, exit = blockOut) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     ToolRow(np, locked, onCollapse, actions, textView, readable != null, onViewChange = { textChosen.value = it },
                         onReadingSettings = { sheet = Sheet.Reading }, onFocus = { focus = true })
                     PlayingOnStrip()
 
-                    AnimatedVisibility(!textView, enter = blockIn, exit = blockOut) {
+                    AnimatedVisibility(!textView && !short, enter = blockIn, exit = blockOut) {
                         // Whole-book block: title, thin progress bar, "Read x of y · n% · Left z".
                         Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(listOfNotNull(book.author, book.title).joinToString(" – "), Modifier.basicMarquee(), style = MaterialTheme.typography.titleMediumEmphasized,
@@ -276,7 +290,9 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
                 }
             }
 
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+        }
+        val stage: @Composable (Modifier) -> Unit = { m ->
+            Box(m) {
                 // Stays composed behind the cover, already at the narration, so switching only has to reveal it.
                 if (readable != null) {
                     val shown by animateFloatAsState(if (textView) 1f else 0f, motion.defaultEffectsSpec(), label = "textShown")
@@ -306,8 +322,8 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
                                 book.coverUri, book.title, book.seedColor,
                                 Modifier
                                     .size(side)
-                                    .shadow(24.dp, RoundedCornerShape(32.dp), ambientColor = Color.Black, spotColor = Color.Black)
-                                    .clip(RoundedCornerShape(32.dp))
+                                    .shadow(24.dp, MaterialTheme.shapes.extraLargeIncreased, ambientColor = Color.Black, spotColor = Color.Black)
+                                    .clip(MaterialTheme.shapes.extraLargeIncreased)
                                     .clickable(remember { MutableInteractionSource() }, null, onClickLabel = if (np.isPlaying) "Pause" else "Play") { player.playPause() }
                                     .pointerInput(locked) {
                                         var dx = 0f; var dy = 0f
@@ -332,6 +348,8 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
                 }
             }
 
+        }
+        val bottom: @Composable ColumnScope.() -> Unit = {
             AnimatedVisibility(!focus, enter = blockIn, exit = blockOut) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     AnimatedVisibility(!textView, enter = blockIn, exit = blockOut) {
@@ -341,11 +359,11 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
                             if (file != null) PickerRow(file, MaterialTheme.typography.bodyMedium, chevron = !locked && tracks.size > 1,
                                 onClick = if (!locked && tracks.size > 1) ({ openLists(ListTab.Files) }) else null)
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                if (!locked) HoldIconButton(player::prevChapter, { openLists(ListTab.Chapters) }, "Previous chapter", 44.dp, RoundedCornerShape(16.dp), cs.onSurface.copy(alpha = 0.10f)) {
+                                if (!locked) HoldIconButton(player::prevChapter, { openLists(ListTab.Chapters) }, "Previous chapter", 48.dp, MaterialTheme.shapes.large, cs.onSurface.copy(alpha = 0.10f)) {
                                     Icon(Icons.Rounded.SkipPrevious, null, Modifier.size(24.dp))
                                 }
                                 PickerRow(chapterTitle, MaterialTheme.typography.titleLarge, chevron = !locked, onClick = { openLists(ListTab.Chapters) }, modifier = Modifier.weight(1f))
-                                if (!locked) HoldIconButton(player::nextChapter, { openLists(ListTab.Chapters) }, "Next chapter", 44.dp, RoundedCornerShape(16.dp), cs.onSurface.copy(alpha = 0.10f)) {
+                                if (!locked) HoldIconButton(player::nextChapter, { openLists(ListTab.Chapters) }, "Next chapter", 48.dp, MaterialTheme.shapes.large, cs.onSurface.copy(alpha = 0.10f)) {
                                     Icon(Icons.Rounded.SkipNext, null, Modifier.size(24.dp))
                                 }
                             }
@@ -353,9 +371,25 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
                             ChapterSeek(np, enabled = !locked)
                         }
                     }
-                    Transport(np, settings, locked)
+                    Transport(np, settings, locked, if (short) 0.85f else 1.15f)
                 }
             }
+        }
+        if (sideBySide) Column(frame) {
+            header()
+            Row(Modifier.weight(1f)) {
+                stage(Modifier.weight(1f).fillMaxHeight())
+                // Focused reading gives the text the whole width; the stage stays the Row's first child, so the text keeps its place.
+                if (!focus) Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.SpaceBetween) {
+                    top()
+                    bottom()
+                }
+            }
+        } else Column(frame) {
+            header()
+            top()
+            stage(Modifier.weight(1f).fillMaxWidth())
+            bottom()
         }
         if (textView && focus) {
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(200.dp).background(Brush.verticalGradient(0f to Color.Transparent, 0.58f to cs.background)))
@@ -366,9 +400,7 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
         // Transient confirmation (e.g. bookmark added); sits under the tool row.
         AnimatedVisibility(toast != null, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 118.dp, start = 24.dp, end = 24.dp),
             enter = fadeIn() + scaleIn(initialScale = 0.9f), exit = fadeOut()) {
-            Surface(shape = RoundedCornerShape(20.dp), color = cs.inverseSurface, contentColor = cs.inverseOnSurface, shadowElevation = 6.dp) {
-                Text(toast.orEmpty(), Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
+            Snackbar(Modifier.widthIn(max = 560.dp)) { Text(toast.orEmpty(), maxLines = 2, overflow = TextOverflow.Ellipsis) }
         }
     }
 
@@ -414,7 +446,7 @@ private fun ToolRow(np: NowPlaying, locked: Boolean, onCollapse: () -> Unit, a: 
     val context = LocalContext.current
     val castAvailable = remember { CastSupport.init(context) }
     val none = Color.Transparent
-    val h = 44.dp
+    val h = 48.dp
     Row(
         Modifier.fillMaxWidth().padding(top = 4.dp)
             .pointerInput(Unit) { var dy = 0f; detectDragGestures(onDragStart = { dy = 0f }, onDragEnd = { if (dy > 80f) onCollapse() }) { _, d -> dy += d.y } },
@@ -422,20 +454,20 @@ private fun ToolRow(np: NowPlaying, locked: Boolean, onCollapse: () -> Unit, a: 
     ) {
         val compact = LocalConfiguration.current.screenWidthDp < 380 // the labelled switch needs the room on narrow phones
         val m = Modifier.size(if (compact) 40.dp else h, h)
-        HoldIconButton(onCollapse, {}, "Collapse player", h, RoundedCornerShape(16.dp), none, m) { Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(28.dp)) }
-        HoldIconButton(a.onSleep, a.onSleepLong, "Sleep timer. Long press to toggle", h, RoundedCornerShape(16.dp), if (np.sleep.mode != SleepMode.Off) cs.primary else none, m, enabled = !locked) { SleepGlyph(np) }
-        HoldIconButton(a.onLock, {}, if (locked) "Unlock controls" else "Lock controls", h, RoundedCornerShape(16.dp), if (locked) cs.errorContainer else none, m,
+        HoldIconButton(onCollapse, {}, "Collapse player", h, MaterialTheme.shapes.large, none, m) { Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(28.dp)) }
+        HoldIconButton(a.onSleep, a.onSleepLong, "Sleep timer. Long press to toggle", h, MaterialTheme.shapes.large, if (np.sleep.mode != SleepMode.Off) cs.primary else none, m, enabled = !locked) { SleepGlyph(np) }
+        HoldIconButton(a.onLock, {}, if (locked) "Unlock controls" else "Lock controls", h, MaterialTheme.shapes.large, if (locked) cs.errorContainer else none, m,
             content = if (locked) cs.error else null) {
             Icon(if (locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen, null, Modifier.size(22.dp))
         }
-        if (a.onConnect != null) HoldIconButton(a.onConnect, {}, "Devices", h, RoundedCornerShape(16.dp), none, m) { Icon(Icons.Rounded.Devices, null, Modifier.size(22.dp)) }
+        if (a.onConnect != null) HoldIconButton(a.onConnect, {}, "Devices", h, MaterialTheme.shapes.large, none, m) { Icon(Icons.Rounded.Devices, null, Modifier.size(22.dp)) }
         Spacer(Modifier.weight(1f))
         if (hasText) ViewSwitch(textView, onViewChange, compact)
         Box(m) {
-            HoldIconButton({ menu = true }, {}, "More options", h, RoundedCornerShape(16.dp), none, Modifier.fillMaxWidth().height(h), enabled = !locked) {
+            HoldIconButton({ menu = true }, {}, "More options", h, MaterialTheme.shapes.large, none, Modifier.fillMaxWidth().height(h), enabled = !locked) {
                 Icon(Icons.Rounded.MoreVert, null)
             }
-            DropdownMenu(menu, { menu = false }, shape = RoundedCornerShape(20.dp)) {
+            DropdownMenu(menu, { menu = false }, shape = MaterialTheme.shapes.largeIncreased) {
                 @Composable fun item(text: String, icon: ImageVector, trailing: Boolean = false, onClick: () -> Unit) = DropdownMenuItem(
                     { Text(text) }, { menu = false; onClick() }, leadingIcon = { Icon(icon, null) },
                     trailingIcon = if (trailing) { { Icon(Icons.Rounded.Check, "On") } } else null)
@@ -474,13 +506,13 @@ private fun SleepGlyph(np: NowPlaying) {
     val sleep = np.sleep
     val on = sleep.mode != SleepMode.Off
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(Icons.Rounded.Bedtime, null, Modifier.size(if (on) 18.dp else 22.dp))
+        Icon(Icons.Rounded.Bedtime, null, Modifier.size(if (on) 16.dp else 22.dp))
         if (on) Text(
             when (val mode = sleep.mode) {
                 SleepMode.Off -> ""
                 SleepMode.EndOfChapter -> "Zzz"
                 is SleepMode.Duration -> formatClock(if (sleep.remainingMs > 0) sleep.remainingMs else mode.minutes * 60_000L)
-            }, style = MaterialTheme.typography.labelSmall.merge(tnum).copy(fontSize = 9.sp), maxLines = 1)
+            }, style = MaterialTheme.typography.labelSmall.merge(tnum), maxLines = 1)
     }
 }
 
@@ -503,7 +535,7 @@ private fun ViewSwitch(text: Boolean, onChange: (Boolean) -> Unit, compact: Bool
 @Composable
 private fun AaButton(enabled: Boolean, onClick: () -> Unit) {
     val family = remember { readerFamily(ReaderFont.LITERATA, 20) }
-    HoldIconButton(onClick, {}, "Reading settings", 44.dp, RoundedCornerShape(16.dp), Color.Transparent, Modifier.size(44.dp, 48.dp), enabled = enabled) {
+    HoldIconButton(onClick, {}, "Reading settings", 48.dp, MaterialTheme.shapes.large, Color.Transparent, Modifier.size(48.dp), enabled = enabled) {
         Text("Aa", style = TextStyle(fontFamily = family, fontSize = 20.sp, fontWeight = FontWeight.Medium), maxLines = 1)
     }
 }
@@ -511,7 +543,7 @@ private fun AaButton(enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun FocusHeader(title: String, settingsEnabled: Boolean, onExit: () -> Unit, onReadingSettings: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        HoldIconButton(onExit, {}, "Exit focused reading", 48.dp, RoundedCornerShape(16.dp), Color.Transparent) { Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(28.dp)) }
+        HoldIconButton(onExit, {}, "Exit focused reading", 48.dp, MaterialTheme.shapes.large, Color.Transparent) { Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(28.dp)) }
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
         AaButton(settingsEnabled, onReadingSettings)
@@ -523,17 +555,17 @@ private fun FocusHeader(title: String, settingsEnabled: Boolean, onExit: () -> U
 private fun FocusPill(np: NowPlaying, title: String, s: Settings, locked: Boolean, modifier: Modifier) {
     val player = MFBooksApp.get(LocalContext.current).player
     val cs = MaterialTheme.colorScheme
-    Surface(modifier.fillMaxWidth().height(68.dp), RoundedCornerShape(34.dp), cs.surfaceContainerHigh, cs.onSurface) {
+    Surface(modifier.fillMaxWidth().height(68.dp), CircleShape, cs.surfaceContainerHigh, cs.onSurface) {
         Row(Modifier.padding(start = 22.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${formatHm(np.bookDurationMs - np.positionInBookMs)} left", style = MaterialTheme.typography.labelMedium.merge(tnum), color = cs.onSurfaceVariant, maxLines = 1)
             }
             HoldIconButton({ player.skipBy(-s.rewindSmallSec * 1000L) }, { player.skipBy(-s.rewindBigSec * 1000L) }, "Rewind ${secLabel(s.rewindSmallSec)}. Long press: ${secLabel(s.rewindBigSec)}",
-                48.dp, RoundedCornerShape(16.dp), Color.Transparent, enabled = !locked) { SeekIcon(s.rewindSmallSec, forward = false, desc = null, size = 26.dp) }
-            PlayButton(np, 52.dp, 26.dp, RoundedCornerShape(18.dp))
+                48.dp, MaterialTheme.shapes.large, Color.Transparent, enabled = !locked) { SeekIcon(s.rewindSmallSec, forward = false, desc = null, size = 26.dp) }
+            PlayButton(np, 52.dp, 26.dp, MaterialTheme.shapes.large)
             HoldIconButton({ player.skipBy(s.fwdSmallSec * 1000L) }, { player.skipBy(s.fwdBigSec * 1000L) }, "Forward ${secLabel(s.fwdSmallSec)}. Long press: ${secLabel(s.fwdBigSec)}",
-                48.dp, RoundedCornerShape(16.dp), Color.Transparent, enabled = !locked) { SeekIcon(s.fwdSmallSec, forward = true, desc = null, size = 26.dp) }
+                48.dp, MaterialTheme.shapes.large, Color.Transparent, enabled = !locked) { SeekIcon(s.fwdSmallSec, forward = true, desc = null, size = 26.dp) }
         }
     }
 }
@@ -543,7 +575,7 @@ private fun FocusPill(np: NowPlaying, title: String, s: Settings, locked: Boolea
 private fun PickerRow(text: String, style: TextStyle, chevron: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Row(
-            Modifier.clip(RoundedCornerShape(16.dp)).then(if (onClick != null) Modifier.clickable(onClickLabel = "Open list", onClick = onClick) else Modifier)
+            Modifier.clip(MaterialTheme.shapes.large).then(if (onClick != null) Modifier.clickable(onClickLabel = "Open list", onClick = onClick) else Modifier)
                 .padding(start = 12.dp, end = if (chevron) 4.dp else 12.dp, top = 4.dp, bottom = 4.dp).animateContentSize(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -569,7 +601,7 @@ private fun ChapterSeek(np: NowPlaying, enabled: Boolean) {
             onValueChange = { state.value = it },
             onValueChangeFinished = { player.seekInChapter((state.value * dur).toLong()) },
             enabled = enabled,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).semantics {
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics {
                 contentDescription = "Chapter position ${formatClock(shown)} of ${formatClock(dur)}"
                 if (enabled) customActions = listOf(
                     CustomAccessibilityAction("Forward 30 seconds") { player.skipBy(30_000); true },
@@ -594,13 +626,13 @@ private fun ChapterSeek(np: NowPlaying, enabled: Boolean) {
  * labelled with its size. Locked: only play/pause is left.
  */
 @Composable
-private fun Transport(np: NowPlaying, s: Settings, locked: Boolean) {
+private fun Transport(np: NowPlaying, s: Settings, locked: Boolean, maxScale: Float = 1.15f) {
     val player = MFBooksApp.get(LocalContext.current).player
     val cs = MaterialTheme.colorScheme
     val container = cs.onSurface.copy(alpha = 0.10f)
     BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 10.dp)) {
         // Scale on narrow screens; 340 dp of content at full size.
-        val k = (maxWidth / 340.dp).coerceIn(0.8f, 1.15f)
+        val k = (maxWidth / 340.dp).coerceIn(0.8f, maxScale)
         Row(Modifier.fillMaxWidth().animateContentSize(), horizontalArrangement = if (locked) Arrangement.Center else Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
             if (!locked) SkipButton(secLabel(s.rewindBigSec), "Rewind ${secLabel(s.rewindBigSec)}", 50.dp * k, 92.dp * k, container, { player.skipBy(-s.rewindBigSec * 1000L) }) {
                 Icon(Icons.Rounded.FastRewind, null, Modifier.size(24.dp * k))
@@ -609,7 +641,7 @@ private fun Transport(np: NowPlaying, s: Settings, locked: Boolean) {
                 { player.skipBy(-s.rewindSmallSec * 1000L) }, { player.skipBy(-s.rewindBigSec * 1000L) }) {
                 SeekIcon(s.rewindSmallSec, forward = false, desc = null, size = 34.dp * k)
             }
-            PlayButton(np, 92.dp * k, 44.dp * k, RoundedCornerShape(30.dp), 48.dp * k)
+            PlayButton(np, 92.dp * k, 44.dp * k, MaterialTheme.shapes.extraLarge, 48.dp * k)
             if (!locked) SkipButton(secLabel(s.fwdSmallSec), "Forward ${secLabel(s.fwdSmallSec)}. Long press: ${secLabel(s.fwdBigSec)}", 66.dp * k, 92.dp * k, container,
                 { player.skipBy(s.fwdSmallSec * 1000L) }, { player.skipBy(s.fwdBigSec * 1000L) }) {
                 SeekIcon(s.fwdSmallSec, forward = true, desc = null, size = 34.dp * k)
@@ -623,7 +655,7 @@ private fun Transport(np: NowPlaying, s: Settings, locked: Boolean) {
 
 /** Play/pause with the Expressive shape morph; [playingShape] is its shape while playing. */
 @Composable
-private fun PlayButton(np: NowPlaying, size: Dp, iconSize: Dp, playingShape: RoundedCornerShape, spinner: Dp = iconSize + 4.dp) {
+private fun PlayButton(np: NowPlaying, size: Dp, iconSize: Dp, playingShape: Shape, spinner: Dp = iconSize + 4.dp) {
     val player = MFBooksApp.get(LocalContext.current).player
     val cs = MaterialTheme.colorScheme
     FilledIconToggleButton(
@@ -669,7 +701,7 @@ internal fun SeekIcon(seconds: Int, forward: Boolean, desc: String?, size: Dp) {
  */
 @Composable
 internal fun HoldIconButton(
-    onClick: () -> Unit, onLong: () -> Unit, desc: String, size: Dp, shape: RoundedCornerShape, container: Color,
+    onClick: () -> Unit, onLong: () -> Unit, desc: String, size: Dp, shape: Shape, container: Color,
     modifier: Modifier = Modifier.size(size), enabled: Boolean = true, content: Color? = null, icon: @Composable () -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
@@ -695,7 +727,7 @@ internal fun HoldIconButton(
             customActions = listOf(CustomAccessibilityAction("Long press action") { onLong(); true })
         },
         enabled = enabled,
-        shapes = IconButtonDefaults.shapes(shape, RoundedCornerShape(12.dp)),
+        shapes = IconButtonDefaults.shapes(shape, MaterialTheme.shapes.medium),
         colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = container, contentColor = fg,
             disabledContainerColor = Color.Transparent, disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)),
         interactionSource = source,

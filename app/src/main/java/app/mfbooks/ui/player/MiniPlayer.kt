@@ -89,13 +89,13 @@ fun MiniPlayer(onExpand: () -> Unit, modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodySmall.tabular(), color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             // Controls locked: only play/pause stays.
-            if (!s.lockControls) IconButton({ player.skipBy(-s.rewindSmallSec * 1000L) }, Modifier.size(40.dp)) {
+            if (!s.lockControls) IconButton({ player.skipBy(-s.rewindSmallSec * 1000L) }) {
                 SeekIcon(s.rewindSmallSec, forward = false, desc = "Rewind ${s.rewindSmallSec} seconds", size = 26.dp)
             }
             FilledIconButton(player::playPause, modifier = Modifier.padding(horizontal = 2.dp).size(46.dp), shapes = IconButtonDefaults.shapes()) {
                 Icon(if (np.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (np.isPlaying) "Pause" else "Play")
             }
-            if (!s.lockControls) IconButton({ player.skipBy(s.fwdSmallSec * 1000L) }, Modifier.size(40.dp)) {
+            if (!s.lockControls) IconButton({ player.skipBy(s.fwdSmallSec * 1000L) }) {
                 SeekIcon(s.fwdSmallSec, forward = true, desc = "Forward ${s.fwdSmallSec} seconds", size = 26.dp)
             }
         }

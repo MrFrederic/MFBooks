@@ -3,7 +3,6 @@ package app.mfbooks.ui.theme
 import android.os.Build
 import android.provider.Settings as AndroidSettings
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -44,10 +43,12 @@ private fun reducedMotion(): Boolean {
     }
 }
 
-/** Animates every role over ~400 ms so switching books cross-fades the app colours. */
+/** Animates every role with the scheme's slow effects spec so switching books cross-fades the app colours. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ColorScheme.animated(): ColorScheme {
-    @Composable fun a(c: Color): Color = animateColorAsState(c, tween(400), label = "scheme").value
+private fun ColorScheme.animated(motion: MotionScheme): ColorScheme {
+    val spec = motion.slowEffectsSpec<Color>()
+    @Composable fun a(c: Color): Color = animateColorAsState(c, spec, label = "scheme").value
     return copy(
         primary = a(primary), onPrimary = a(onPrimary), primaryContainer = a(primaryContainer),
         onPrimaryContainer = a(onPrimaryContainer), inversePrimary = a(inversePrimary),
@@ -96,18 +97,19 @@ fun MFBooksTheme(
     val base = if (dynamic) system else brand
     val seed = if (colorSource == ColorSource.COVER) coverSeed else null
     val cover = rememberDynamicColorScheme(seed?.let { Color(it) } ?: BrandSeed, dark, style = PaletteStyle.TonalSpot)
-    var scheme = (if (seed != null) cover else base).animated()
+    val motion = if (reducedMotion()) MotionScheme.standard() else MotionScheme.expressive()
+    var scheme = (if (seed != null) cover else base).animated(motion)
     if (themeMode == ThemeMode.BLACK) {
         scheme = scheme.copy(
             background = Color.Black, surface = Color.Black, surfaceDim = Color.Black,
             surfaceContainerLowest = Color.Black,
         )
     }
-    val glow = animateColorAsState(comfortable(seed?.let { Color(it) } ?: scheme.primary, dark), tween(400), label = "glow").value
+    val glow = animateColorAsState(comfortable(seed?.let { Color(it) } ?: scheme.primary, dark), motion.slowEffectsSpec(), label = "glow").value
     CompositionLocalProvider(LocalGlow provides Glow(glow, dark)) {
         MaterialExpressiveTheme(
             colorScheme = scheme,
-            motionScheme = if (reducedMotion()) MotionScheme.standard() else MotionScheme.expressive(),
+            motionScheme = motion,
             content = content,
         )
     }

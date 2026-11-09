@@ -80,6 +80,7 @@ import app.mfbooks.convert.formatBytes
 import app.mfbooks.data.Book
 import app.mfbooks.data.Settings
 import app.mfbooks.ui.components.LocalChromePadding
+import app.mfbooks.ui.components.LocalGutter
 import app.mfbooks.ui.components.Panel
 import app.mfbooks.ui.components.SectionHeader
 import app.mfbooks.ui.components.app
@@ -148,7 +149,7 @@ fun ConvertScreen(onBack: () -> Unit) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer),
                 scrollBehavior = scroll,
             )
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalChromePadding.current + 24.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = LocalGutter.current, end = LocalGutter.current, bottom = LocalChromePadding.current + 24.dp)) {
                 // While a run is active the page is only its progress; the options come back when it ends or pauses.
                 if (active) { item("job") { JobPanel(info!!, onPause = pause, onCancel = discard) }; return@LazyColumn }
                 item("saved") {

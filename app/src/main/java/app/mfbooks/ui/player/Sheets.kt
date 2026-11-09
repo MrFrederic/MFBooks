@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -84,7 +83,7 @@ internal fun SheetBase(onDismiss: () -> Unit, title: String, subtitle: String? =
 /** Big tabular readout in a tinted rounded block. */
 @Composable
 private fun Readout(text: String) {
-    Text(text, Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(vertical = 18.dp),
+    Text(text, Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge).background(MaterialTheme.colorScheme.primaryContainer).padding(vertical = 18.dp),
         style = MaterialTheme.typography.displayMediumEmphasized.merge(tnum), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onPrimaryContainer)
 }
 
@@ -133,7 +132,7 @@ fun SleepSheet(mode: SleepMode, onDismiss: () -> Unit) {
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(custom, { custom = it.filter(Char::isDigit).take(3) }, Modifier.weight(1f), label = { Text("Custom minutes") },
-                singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(16.dp))
+                singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = MaterialTheme.shapes.large)
             Button({ custom.toIntOrNull()?.takeIf { it > 0 }?.let { set(SleepMode.Duration(it), it) } }, modifier = Modifier.height(56.dp),
                 enabled = (custom.toIntOrNull() ?: 0) > 0, shapes = ButtonDefaults.shapes()) { Text("Start") }
         }
@@ -168,7 +167,7 @@ fun EqSheet(bookId: String, onDismiss: () -> Unit) {
     }
     SheetBase(onDismiss, "Equalizer", "Saved for this book") {
         Options(eqPresets.map { it.second to it.first }, bands.map { it.value }) { v -> v.forEachIndexed { i, f -> bands[i].value = f }; apply() }
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(vertical = 16.dp),
+        Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(vertical = 16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly) {
             eqHz.forEachIndexed { i, hz ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -204,7 +203,7 @@ fun BoostSheet(boostMb: Int, onDismiss: () -> Unit) {
         Slider(db, { db = it.roundToInt().toFloat() }, valueRange = 0f..15f, steps = 14,
             onValueChangeFinished = { player.setBoost((db * 100).roundToInt()) },
             modifier = Modifier.semantics { contentDescription = "Volume boost in decibels" })
-        if (db > 10f) Row(Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp),
+        if (db > 10f) Row(Modifier.clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Rounded.WarningAmber, null, tint = MaterialTheme.colorScheme.onErrorContainer)
             Text("Above 10 dB, loud passages may clip and distort.", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
@@ -218,8 +217,8 @@ fun BookmarkSheet(defaultTitle: String, onDismiss: () -> Unit) {
     var title by remember { mutableStateOf(defaultTitle) }
     var note by remember { mutableStateOf("") }
     SheetBase(onDismiss, "Add bookmark") {
-        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Title") }, singleLine = true, shape = RoundedCornerShape(16.dp))
-        OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), label = { Text("Note") }, minLines = 2, shape = RoundedCornerShape(16.dp))
+        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Title") }, singleLine = true, shape = MaterialTheme.shapes.large)
+        OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), label = { Text("Note") }, minLines = 2, shape = MaterialTheme.shapes.large)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onDismiss) { Text("Cancel") }
             Button({ player.addBookmark(title.ifBlank { null }, note.ifBlank { null }); onDismiss() }, modifier = Modifier.padding(start = 8.dp),

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.WarningAmber
@@ -102,7 +101,7 @@ private fun Identity(book: Book, parsed: ParsedText) {
     val cs = MaterialTheme.colorScheme
     val doc = parsed.doc
     val same = remember(book, doc) { sameBook(doc.title, doc.author, book.title, book.author) }
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(cs.surfaceContainerHighest).padding(horizontal = 14.dp, vertical = 12.dp),
+    Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(cs.surfaceContainerHighest).padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(28.dp).clip(CircleShape).background(if (same) cs.primary else cs.errorContainer), Alignment.Center) {
             if (same) Icon(Icons.Rounded.Check, null, Modifier.size(18.dp), tint = cs.onPrimary)
@@ -134,7 +133,7 @@ private fun Fact(label: String, value: String, modifier: Modifier) {
 
 @Composable
 private fun MatchOption(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).selectable(selected, role = Role.RadioButton, onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 4.dp),
+    Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).selectable(selected, role = Role.RadioButton, onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
         RadioButton(selected, null)
         Text(label, style = MaterialTheme.typography.bodyLarge)

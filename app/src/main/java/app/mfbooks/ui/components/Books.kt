@@ -104,7 +104,7 @@ fun BookTile(item: BookItem, onClick: () -> Unit, onLongClick: () -> Unit, modif
     val b = item.book
     Column(modifier.clip(RoundedCornerShape(24.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(4.dp)) {
         Box {
-            BookCover(b, Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(20.dp)), corner = 20.dp)
+            BookCover(b, Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), MaterialTheme.shapes.largeIncreased), corner = 20.dp)
             when {
                 playing -> Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(30.dp).background(MaterialTheme.colorScheme.primary, CircleShape), Alignment.Center) {
                     PlayingBars(true, color = MaterialTheme.colorScheme.onPrimary, barWidth = 2.5.dp, modifier = Modifier.size(14.dp))
@@ -130,12 +130,12 @@ fun BookTile(item: BookItem, onClick: () -> Unit, onLongClick: () -> Unit, modif
 @Composable
 fun BookRow(item: BookItem, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier, playing: Boolean = false) {
     val b = item.book
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick)
+    Row(modifier.fillMaxWidth().clip(MaterialTheme.shapes.largeIncreased).combinedClickable(onClick = onClick, onLongClick = onLongClick)
         .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
-            BookCover(b, Modifier.size(60.dp), corner = 14.dp)
+            BookCover(b, Modifier.size(60.dp), corner = 12.dp)
             CloudBadge(b, Modifier.align(Alignment.BottomEnd).padding(2.dp))
-            if (playing) Box(Modifier.matchParentSize().clip(RoundedCornerShape(14.dp)).background(Color.Black.copy(alpha = 0.45f)), Alignment.Center) {
+            if (playing) Box(Modifier.matchParentSize().clip(MaterialTheme.shapes.medium).background(Color.Black.copy(alpha = 0.45f)), Alignment.Center) {
                 PlayingBars(true, color = Color.White)
             }
         }

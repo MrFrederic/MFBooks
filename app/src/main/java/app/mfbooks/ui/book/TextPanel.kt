@@ -98,7 +98,7 @@ fun TextPanel(book: Book, onManage: () -> Unit, modifier: Modifier = Modifier) {
             when {
                 import.busy -> LinearWavyProgressIndicator(Modifier.fillMaxWidth().padding(top = 16.dp))
                 found != null -> PanelButtons("Use this file", { import.load(found.uri) }, "Choose another", import::pick)
-                else -> Button(import::pick, Modifier.fillMaxWidth().padding(top = 16.dp).height(44.dp)) { Text("Add text") }
+                else -> Button(import::pick, Modifier.fillMaxWidth().padding(top = 16.dp).height(48.dp)) { Text("Add text") }
             }
         }
         else -> Panel(cardModifier) { RowState(book, row, settings, import, onManage) }
@@ -141,7 +141,7 @@ private fun ColumnScope.RowState(book: Book, row: BookText, settings: Settings, 
         }
         TextState.AUDIO_CHANGED -> {
             Text("The audio has changed", style = MaterialTheme.typography.titleMedium)
-            Button({ Matching.enqueue(ctx, book.id, false) }, Modifier.fillMaxWidth().padding(top = 14.dp).height(44.dp)) { Text("Match again") }
+            Button({ Matching.enqueue(ctx, book.id, false) }, Modifier.fillMaxWidth().padding(top = 14.dp).height(48.dp)) { Text("Match again") }
             VoskOffer(row.lang, Modifier.padding(top = 14.dp))
         }
         TextState.READY -> {
@@ -212,7 +212,7 @@ private fun ColumnScope.Waiting(title: String, body: String?, read: () -> Unit, 
 // ponytail: the design has Manage only on the ready card; this keeps cancel, replace and remove reachable while a job runs
 @Composable
 private fun ManageIcon(onManage: () -> Unit) {
-    IconButton(onManage, Modifier.padding(start = 4.dp).size(32.dp)) { Icon(Icons.Rounded.Tune, "Manage", Modifier.size(20.dp)) }
+    IconButton(onManage) { Icon(Icons.Rounded.Tune, "Manage", Modifier.size(20.dp)) }
 }
 
 @Composable
@@ -223,7 +223,7 @@ private fun Header(subtitle: String? = null, onClose: (() -> Unit)? = null) {
             Text("Read along", style = MaterialTheme.typography.titleMedium)
             subtitle?.let { Body(it) }
         }
-        onClose?.let { IconButton(it, Modifier.size(32.dp)) { Icon(Icons.Rounded.Close, "Dismiss", Modifier.size(20.dp)) } }
+        onClose?.let { IconButton(it) { Icon(Icons.Rounded.Close, "Dismiss", Modifier.size(20.dp)) } }
     }
 }
 

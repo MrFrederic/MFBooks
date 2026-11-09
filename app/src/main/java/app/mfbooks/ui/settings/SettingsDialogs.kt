@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -33,7 +32,7 @@ class Choice<T>(val value: T, val label: String, val note: String? = null, val e
 @Composable
 private fun <T> RadioOption(c: Choice<T>, selected: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).selectable(selected, enabled = c.enabled, role = Role.RadioButton, onClick = onClick).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).selectable(selected, enabled = c.enabled, role = Role.RadioButton, onClick = onClick).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected, null, Modifier.padding(start = 8.dp), enabled = c.enabled)

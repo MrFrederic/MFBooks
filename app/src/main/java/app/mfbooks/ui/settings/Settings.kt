@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.mfbooks.data.Settings
 import app.mfbooks.ui.components.LocalChromePadding
+import app.mfbooks.ui.components.LocalGutter
 import app.mfbooks.ui.components.LocalSnackbar
 import app.mfbooks.ui.components.app
 import app.mfbooks.ui.components.rememberAddFolder
@@ -86,7 +87,7 @@ internal fun SettingsScaffold(title: String, onBack: () -> Unit, content: @Compo
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer),
                 scrollBehavior = scroll,
             )
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = LocalChromePadding.current + 16.dp)) { content() }
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = LocalGutter.current).padding(bottom = LocalChromePadding.current + 16.dp)) { content() }
         }
     }
 }

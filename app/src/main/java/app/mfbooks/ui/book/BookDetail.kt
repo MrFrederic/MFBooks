@@ -18,10 +18,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Pause
@@ -70,6 +70,7 @@ import app.mfbooks.data.Chapter
 import app.mfbooks.ui.components.BookCover
 import app.mfbooks.ui.components.CoverBackdrop
 import app.mfbooks.ui.components.LocalChromePadding
+import app.mfbooks.ui.components.LocalGutter
 import app.mfbooks.ui.components.Panel
 import app.mfbooks.ui.components.PlayingBars
 import app.mfbooks.ui.components.SectionHeader
@@ -99,10 +100,10 @@ fun BookDetailScreen(bookId: String, onManageText: () -> Unit, onBack: () -> Uni
     Box(Modifier.fillMaxSize().nestedScroll(scroll.nestedScrollConnection)) {
         if (item == null || b == null) return@Box
         CoverBackdrop(b.coverUri, b.seedColor, Modifier.fillMaxWidth().height(520.dp))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalChromePadding.current + 16.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = LocalGutter.current, end = LocalGutter.current, bottom = LocalChromePadding.current + 16.dp)) {
             item {
                 Column(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 64.dp, start = 24.dp, end = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    BookCover(b, Modifier.fillMaxWidth(0.66f).shadow(24.dp, RoundedCornerShape(28.dp)))
+                    BookCover(b, Modifier.widthIn(max = 320.dp / 0.66f).fillMaxWidth(0.66f).shadow(24.dp, MaterialTheme.shapes.extraLarge))
                     Text(b.title, Modifier.padding(top = 24.dp), style = MaterialTheme.typography.headlineMediumEmphasized, textAlign = TextAlign.Center,
                         maxLines = 3, overflow = TextOverflow.Ellipsis)
                     b.author?.let { Text(it, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
@@ -212,18 +213,18 @@ private fun Meta(text: String, highlight: Boolean = false) {
 fun ChapterRow(c: Chapter, current: Boolean, listened: Boolean, playing: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+        modifier.fillMaxWidth().clip(MaterialTheme.shapes.largeIncreased)
             .background(if (current) cs.secondaryContainer else Color.Transparent)
-            .clickable(onClick = onClick).alpha(if (listened) 0.55f else 1f)
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(if (current) cs.primary else cs.surfaceContainerHigh), Alignment.Center) {
+        Box(Modifier.size(36.dp).alpha(if (listened) 0.55f else 1f).clip(MaterialTheme.shapes.medium).background(if (current) cs.primary else cs.surfaceContainerHigh), Alignment.Center) {
             if (current) PlayingBars(playing, color = cs.onPrimary)
             else Text("${c.index + 1}", style = MaterialTheme.typography.labelLarge.tabular(), color = cs.onSurfaceVariant)
         }
         Text(c.title, Modifier.weight(1f).padding(horizontal = 16.dp), maxLines = 2, overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyLarge, color = if (current) cs.onSecondaryContainer else cs.onSurface)
+            style = MaterialTheme.typography.bodyLarge, color = if (current) cs.onSecondaryContainer else if (listened) cs.onSurfaceVariant else cs.onSurface)
         Text(formatClock(c.durationMs), style = MaterialTheme.typography.bodySmall.tabular(), color = cs.onSurfaceVariant)
     }
 }

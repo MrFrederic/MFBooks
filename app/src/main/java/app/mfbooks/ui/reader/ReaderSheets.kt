@@ -93,10 +93,10 @@ internal fun SentenceSheet(
 private fun MenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(MaterialTheme.shapes.largeIncreased).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(cs.secondaryContainer), Alignment.Center) {
+        Box(Modifier.size(40.dp).clip(MaterialTheme.shapes.medium).background(cs.secondaryContainer), Alignment.Center) {
             Icon(icon, null, Modifier.size(22.dp), tint = cs.primary)
         }
         Text(label, style = MaterialTheme.typography.bodyLarge)
@@ -162,15 +162,15 @@ private fun SizeRow(current: Int, onChange: (Int) -> Unit) {
             Label("$shown")
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            HoldIconButton({ step(shown - 1) }, {}, "Smaller text", 44.dp, RoundedCornerShape(16.dp), Color.Transparent) { Text("A", style = TextStyle(fontFamily = FontFamily.Serif, fontSize = 15.sp)) }
+            HoldIconButton({ step(shown - 1) }, {}, "Smaller text", 48.dp, MaterialTheme.shapes.large, Color.Transparent) { Text("A", style = TextStyle(fontFamily = FontFamily.Serif, fontSize = 15.sp)) }
             Slider(
                 state, onValueChange = { step(it.roundToInt()) },
-                modifier = Modifier.weight(1f).heightIn(min = 44.dp).semantics { contentDescription = "Text size $shown" },
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { contentDescription = "Text size $shown" },
                 interactionSource = source,
                 thumb = { SliderDefaults.Thumb(source, Modifier, SliderDefaults.colors(), true, DpSize(4.dp, 32.dp)) },
                 track = { SliderDefaults.Track(it, Modifier.height(12.dp)) },
             )
-            HoldIconButton({ step(shown + 1) }, {}, "Larger text", 44.dp, RoundedCornerShape(16.dp), Color.Transparent) { Text("A", style = TextStyle(fontFamily = FontFamily.Serif, fontSize = 24.sp)) }
+            HoldIconButton({ step(shown + 1) }, {}, "Larger text", 48.dp, MaterialTheme.shapes.large, Color.Transparent) { Text("A", style = TextStyle(fontFamily = FontFamily.Serif, fontSize = 24.sp)) }
         }
     }
 }
@@ -179,7 +179,7 @@ private fun SizeRow(current: Int, onChange: (Int) -> Unit) {
 private fun RowScope.Density(title: String, low: String, high: String, value: ReaderDensity, onPick: (ReaderDensity) -> Unit) {
     Column(Modifier.weight(1f)) {
         Label(title)
-        Connected(ReaderDensity.entries, value, onPick, 44.dp, { d -> when (d) { ReaderDensity.COMPACT -> low; ReaderDensity.NORMAL -> "Normal"; ReaderDensity.RELAXED -> high } }) { d ->
+        Connected(ReaderDensity.entries, value, onPick, 48.dp, { d -> when (d) { ReaderDensity.COMPACT -> low; ReaderDensity.NORMAL -> "Normal"; ReaderDensity.RELAXED -> high } }) { d ->
             Text(when (d) { ReaderDensity.COMPACT -> "S"; ReaderDensity.NORMAL -> "M"; ReaderDensity.RELAXED -> "L" }, style = MaterialTheme.typography.labelLarge)
         }
     }
@@ -206,7 +206,7 @@ private fun <T> Connected(options: List<T>, selected: T, onPick: (T) -> Unit, he
 @Composable
 private fun RowScope.Tile(h: HighlightStyle, on: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(18.dp)
+    val shape = MaterialTheme.shapes.large
     val label = when (h) { HighlightStyle.PLAYHEAD -> "Playhead"; HighlightStyle.BAND -> "Band"; HighlightStyle.WORD -> "Word only"; HighlightStyle.OFF -> "Off" }
     Column(
         Modifier.weight(1f).height(88.dp).clip(shape).background(if (on) cs.secondaryContainer else cs.surfaceContainerHighest)
@@ -228,7 +228,7 @@ private fun TilePreview(h: HighlightStyle, band: Color) {
             Box(Modifier.size(3.dp, 26.dp).clip(RoundedCornerShape(2.dp)).background(cs.primary))
             TwoLines(cs.onSurface, 36.dp, 26.dp)
         }
-        HighlightStyle.BAND -> Box(Modifier.clip(RoundedCornerShape(7.dp)).background(band).padding(horizontal = 6.dp, vertical = 5.dp)) { TwoLines(cs.onSurface, 36.dp, 26.dp) }
+        HighlightStyle.BAND -> Box(Modifier.clip(MaterialTheme.shapes.small).background(band).padding(horizontal = 6.dp, vertical = 5.dp)) { TwoLines(cs.onSurface, 36.dp, 26.dp) }
         HighlightStyle.WORD -> Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { PreviewLine(14.dp, dim); PreviewLine(18.dp, cs.primary); PreviewLine(8.dp, dim) }
             PreviewLine(30.dp, dim)

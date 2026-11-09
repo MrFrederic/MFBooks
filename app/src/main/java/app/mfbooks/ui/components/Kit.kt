@@ -42,6 +42,12 @@ import androidx.compose.ui.unit.dp
 /** Height of the floating chrome (mini player + toolbar + nav bar inset) that scrolling content must clear. */
 val LocalChromePadding = compositionLocalOf { 0.dp }
 
+/** Widest a page's reading content gets; wider windows (tablets, unfolded foldables, landscape) centre it. */
+val ReadableWidth = 840.dp
+
+/** Side margin a page adds to stay within [ReadableWidth]; 0 on phones. */
+val LocalGutter = compositionLocalOf { 0.dp }
+
 
 /** Section title in the primary colour, like "Keep listening". */
 @Composable
@@ -116,13 +122,13 @@ fun SettingsGroup(title: String?, rows: List<GroupRow>, modifier: Modifier = Mod
 
 @Composable
 fun IconTile(icon: ImageVector, modifier: Modifier = Modifier) {
-    Box(modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)), Alignment.Center) {
-        Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+    Box(modifier.size(40.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.primaryContainer), Alignment.Center) {
+        Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
     }
 }
 
 /** A rounded card surface used by Stats and Home. */
 @Composable
 fun Panel(modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.surfaceContainer, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(28.dp)).background(color).padding(20.dp), content = content)
+    Column(modifier.clip(MaterialTheme.shapes.extraLarge).background(color).padding(20.dp), content = content)
 }

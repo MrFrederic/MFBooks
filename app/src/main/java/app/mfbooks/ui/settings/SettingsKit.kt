@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ListItemShapes
@@ -27,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import app.mfbooks.ui.components.IconTile
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -37,15 +37,6 @@ class Item(val title: String, val keywords: String = "", val render: @Composable
 class Section(val title: String?, val items: List<Item>, val footer: String? = null, val searchable: Boolean = true)
 
 private val rowColors @Composable get() = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f))
-
-/** Icon tile in the primary container colour, the same on the root list and every page. */
-@Composable
-fun Tile(icon: ImageVector) {
-    val cs = MaterialTheme.colorScheme
-    Box(Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(cs.primaryContainer), Alignment.Center) {
-        Icon(icon, null, Modifier.size(22.dp), tint = cs.onPrimaryContainer)
-    }
-}
 
 @Composable
 fun SettingRow(
@@ -58,7 +49,7 @@ fun SettingRow(
     below: (@Composable () -> Unit)? = null,
     value: String? = null,
 ) {
-    val lead: (@Composable () -> Unit)? = icon?.let { { Tile(it) } }
+    val lead: (@Composable () -> Unit)? = icon?.let { { IconTile(it) } }
     val sup: (@Composable () -> Unit)? = if (summary == null && below == null) null else {
         {
             Column {
