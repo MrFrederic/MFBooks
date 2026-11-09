@@ -406,6 +406,8 @@ private fun ToolRow(np: NowPlaying, locked: Boolean, onCollapse: () -> Unit, a: 
             Icon(if (locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen, null, Modifier.size(22.dp))
         }
         if (a.onConnect != null) HoldIconButton(a.onConnect, {}, "Devices", h, RoundedCornerShape(16.dp), none, m) { Icon(Icons.Rounded.Devices, null, Modifier.size(22.dp)) }
+        Spacer(Modifier.weight(1f))
+        if (hasText) ViewSwitch(textView, onViewChange, compact)
         Box(m) {
             HoldIconButton({ menu = true }, {}, "More options", h, RoundedCornerShape(16.dp), none, Modifier.fillMaxWidth().height(h), enabled = !locked) {
                 Icon(Icons.Rounded.MoreVert, null)
@@ -435,8 +437,6 @@ private fun ToolRow(np: NowPlaying, locked: Boolean, onCollapse: () -> Unit, a: 
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
-        if (hasText) ViewSwitch(textView, onViewChange, compact)
     }
 }
 
