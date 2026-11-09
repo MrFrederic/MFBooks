@@ -36,7 +36,6 @@ class VoskDownloadWorker(context: Context, params: WorkerParameters) : Coroutine
                 if (pct != shown) { shown = pct; nm.notify(NOTIFICATION_ID, foreground(pct).notification) }
             }
             Matching.modelsVersion.update { it + 1 }
-            inputData.getString(KEY_BOOK)?.let { Matching.enqueue(applicationContext, it, true) }
             return Result.success()
         } catch (e: CancellationException) { throw e } catch (e: IOException) {
             Log.w("VoskDownload", "failed", e)
@@ -48,6 +47,7 @@ class VoskDownloadWorker(context: Context, params: WorkerParameters) : Coroutine
             return Result.failure()
         } finally {
             Matching.downloads.update { it - lang }
+            Matching.downloadEnded(applicationContext, lang)
         }
     }
 
@@ -66,15 +66,14 @@ class VoskDownloadWorker(context: Context, params: WorkerParameters) : Coroutine
 
     companion object {
         private const val KEY_LANG = "lang"
-        private const val KEY_BOOK = "book"
         private const val CHANNEL = "match"
         private const val NOTIFICATION_ID = 4699
 
-        fun enqueue(context: Context, lang: String, matchBook: String?) {
+        fun enqueue(context: Context, lang: String) {
             WorkManager.getInstance(context).enqueueUniqueWork("vosk-$lang", ExistingWorkPolicy.KEEP,
                 OneTimeWorkRequestBuilder<VoskDownloadWorker>()
                     .setConstraints(Constraints(requiredNetworkType = NetworkType.CONNECTED))
-                    .setInputData(workDataOf(KEY_LANG to lang, KEY_BOOK to matchBook))
+                    .setInputData(workDataOf(KEY_LANG to lang))
                     .build())
         }
     }

@@ -64,7 +64,7 @@ Add **Jsoup** to `:shared`. One dependency covers FB2 (XML mode) and malformed E
 - **FB2:** decode with the existing `decodeText` (windows-1251 is common), remove `<binary>` blocks before parsing, then walk `<body>`, `<section>`, `<title>`, `<p>`, `<poem>`, `<cite>`, `<epigraph>`. The notes body becomes `kind: note` blocks.
 - **EPUB:** read `META-INF/container.xml`, then the OPF spine in order. The TOC comes from `nav.xhtml` or `toc.ncx`.
 - **TXT:** decode, split on blank lines. Detect headings with the same words the chapter parser treats as generic.
-- **Text language:** FB2 `<lang>`, EPUB `dc:language`, otherwise a Cyrillic/Latin letter count, which is enough for the Russian and English targets. The user can change it in the review sheet. The spoken language is checked separately (§1.6).
+- **Text language:** FB2 `<lang>`, EPUB `dc:language`, otherwise a Cyrillic/Latin letter count, which is enough for the Russian and English targets. It is shown in the review sheet, not chosen there. The spoken language is checked separately (§1.6).
 - **Sentences and words:** `java.text.BreakIterator`, computed once at parse time and stored so the web player needs no segmentation code.
 
 Inputs are untrusted, on the server especially:
@@ -170,9 +170,9 @@ The transcript is independent of the ebook. It is kept so a different edition of
 - `SpeechRecognizer` must be created on the main thread and destroyed after each session.
 - Check whether `RECORD_AUDIO` is needed with file input. The app doesn't request it today, and asking for the microphone would be a poor trade. If it's required, the Android engine stays off by default.
 
-**Spoken language.** On Android 14+, the probe sets `EXTRA_ENABLE_LANGUAGE_DETECTION` with `EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES = [ru-RU, en-US]`, sampling 30 seconds at 10%, 50% and 80% of the book. Only `CONFIDENT` or better results count. The result:
+**Spoken language.** The user doesn't pick a language. A manual override stays on the Text and sync screen for when detection is wrong. On Android 14+, the job sets `EXTRA_ENABLE_LANGUAGE_DETECTION` with `EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES = [ru-RU, en-US]`, sampling 30 seconds at 10%, 50% and 80% of the book. Only `CONFIDENT` or better results count. The result:
 
-- Chooses the recognition language.
+- Chooses the recognition language and updates the book, overriding a wrong language tag in the file.
 - Warns before hours of work if the audio and text languages differ, for example an English ebook with a Russian narration.
 - Where detection is unavailable, the text language is used and the early-stop rule below catches a mismatch.
 
@@ -361,7 +361,8 @@ The listener owns DRM-free audio and text for the same book. They want to follow
 |---|---|
 | R1 | Add a text file to any book from the book screen. |
 | R2 | Be offered a text file found in the book's folder. |
-| R3 | See what was parsed (title, author, language, words, chapters) before anything starts. |
+| R3 | See what was parsed (title, author, detected language, words, chapters) before anything starts. |
+| R3a | Be offered Vosk, with its benefits and an on-the-spot download, wherever matching can start. |
 | R4 | Read immediately, before matching finishes, with a clear "Approximate" label. |
 | R5 | Choose when matching runs: now, or when charging. |
 | R6 | See progress on the book screen and in a notification. Pause, resume or cancel it. |

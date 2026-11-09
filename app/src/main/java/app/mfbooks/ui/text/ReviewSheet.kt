@@ -3,14 +3,13 @@
 package app.mfbooks.ui.text
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
@@ -19,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -46,7 +44,6 @@ import app.mfbooks.text.ParsedText
 import app.mfbooks.text.wordCount
 import app.mfbooks.ui.player.SheetBase
 import app.mfbooks.ui.settings.Choice
-import app.mfbooks.ui.settings.ChoiceDialog
 import app.mfbooks.ui.theme.tabular
 import kotlinx.coroutines.CancellationException
 import java.util.Locale
@@ -59,13 +56,12 @@ fun languageChoices(current: String) = (MATCHABLE_LANGS + current).distinct().ma
 fun ReviewSheet(book: Book, parsed: ParsedText, onAdd: (lang: String, now: Boolean, match: Boolean) -> Unit, onReplace: () -> Unit, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val doc = parsed.doc
-    var lang by remember { mutableStateOf(doc.lang) }
+    val lang = doc.lang
     var now by remember { mutableStateOf(false) }
-    var picking by remember { mutableStateOf(false) }
     var continued by remember { mutableStateOf(false) }
     val words = remember(doc) { doc.wordCount() }
     val spoken by produceState<String?>(null) {
-        value = try { Matching.detectSpokenLanguage(ctx, book.id) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        value = try { Matching.detectSpokenLanguage(ctx, book.id, doc.lang) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
     }
     val matchable = lang in MATCHABLE_LANGS
     val mismatch = spoken?.takeIf { it != lang && !continued }
@@ -75,13 +71,7 @@ fun ReviewSheet(book: Book, parsed: ParsedText, onAdd: (lang: String, now: Boole
         Row(Modifier.fillMaxWidth()) {
             Fact("Words", "%,d".format(Locale.US, words), Modifier.weight(1f))
             Fact("Chapters", doc.toc.size.toString(), Modifier.weight(1f))
-        }
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { picking = true }.heightIn(min = 56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Language", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(langName(lang), style = MaterialTheme.typography.bodyLarge)
-            }
-            Icon(Icons.Rounded.ExpandMore, null)
+            Fact("Language", langName(lang), Modifier.weight(1f))
         }
         if (matchable) {
             Column(Modifier.selectableGroup()) {
@@ -91,6 +81,8 @@ fun ReviewSheet(book: Book, parsed: ParsedText, onAdd: (lang: String, now: Boole
             }
         } else Text("Word matching isn't available for this language yet", Modifier.padding(horizontal = 4.dp),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        if (matchable) VoskOffer(lang)
 
         if (mismatch != null) {
             Text("Audio is in ${langName(mismatch)}, text is in ${langName(lang)}", style = MaterialTheme.typography.titleMedium)
@@ -102,7 +94,6 @@ fun ReviewSheet(book: Book, parsed: ParsedText, onAdd: (lang: String, now: Boole
             }
         }
     }
-    if (picking) ChoiceDialog("Language", languageChoices(doc.lang), lang, { lang = it; picking = false }, { picking = false })
 }
 
 /** Title and author of the text, or both names with a warning when they don't look like the audiobook. */

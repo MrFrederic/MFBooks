@@ -85,6 +85,14 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         var covered = Coverage.merge(members.map { Coverage.range(it.fromMs, it.untilMs) })
         val plan = ChunkPlan.plan(audioMs, startPosition(tracks, audioMs), CHUNK_MS, covered)
         var engineName = members.lastOrNull()?.engine
+
+        // The audio decides. Text language is only the fallback for phones that can't detect speech.
+        var lang = row.lang
+        if (plan.isNotEmpty() && members.isEmpty() && !inputData.getBoolean(KEY_KEEP_LANG, false)) {
+            val spoken = detectSpoken(applicationContext, tracks, row.lang)
+            Log.i(TAG, "$bookId: spoken language $spoken, text ${row.lang}")
+            if (spoken != null && spoken != lang) { lang = spoken; texts.setLang(bookId, spoken, System.currentTimeMillis()) }
+        }
         var alignedAt = Coverage.totalMs(covered)
 
         val syncTracks = tracks.map { SyncTrack(it.fileName, it.durationMs) }
@@ -103,7 +111,7 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
             var engine: SpeechEngine? = null
             try {
                 val pref = Matching.effectiveEngine(applicationContext, settings.speechEngine)
-                var current = openEngine(pref, row.lang, doc, tracks, audioMs, engineName).also { engine = it }
+                var current = openEngine(pref, lang, doc, tracks, audioMs, engineName).also { engine = it }
                 engineName = current.name
                 PcmReader(applicationContext, tracks) { isStopped }.use { reader ->
                     for (c in plan) {
@@ -114,7 +122,7 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
                             if (pref != SpeechEnginePref.AUTO || current is VoskEngine) throw f
                             Log.w(TAG, "$bookId: Android engine failed mid-job (${f.kind}), switching to Vosk")
                             current.close()
-                            current = openVosk(row.lang).also { engine = it }
+                            current = openVosk(lang).also { engine = it }
                             engineName = current.name
                             current.transcribe(pcm)
                         }
@@ -274,6 +282,7 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         private const val NOTIFICATION_ID = 4700
         private const val KEY_BOOK = "bookId"
         private const val KEY_NOW = "now"
+        private const val KEY_KEEP_LANG = "keepLang"
         const val P_PERCENT = "percent"
         const val OUT_MESSAGE = "message"
         private const val MAX_ATTEMPTS = 5
@@ -285,13 +294,13 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
 
         private fun name(bookId: String) = "align-$bookId"
 
-        fun enqueue(context: Context, bookId: String, matchWhen: MatchWhen, now: Boolean) =
-            enqueue(context, bookId, requireCharging = !now && matchWhen == MatchWhen.CHARGING, now = now, policy = ExistingWorkPolicy.REPLACE)
+        fun enqueue(context: Context, bookId: String, matchWhen: MatchWhen, now: Boolean, keepLanguage: Boolean = false) =
+            enqueue(context, bookId, requireCharging = !now && matchWhen == MatchWhen.CHARGING, now = now, policy = ExistingWorkPolicy.REPLACE, keepLanguage = keepLanguage)
 
-        internal fun enqueue(context: Context, bookId: String, requireCharging: Boolean, now: Boolean, policy: ExistingWorkPolicy) {
+        internal fun enqueue(context: Context, bookId: String, requireCharging: Boolean, now: Boolean, policy: ExistingWorkPolicy, keepLanguage: Boolean = false) {
             val c = Constraints.Builder().setRequiresStorageNotLow(true).setRequiresCharging(requireCharging).build()
             WorkManager.getInstance(context).enqueueUniqueWork(name(bookId), policy, OneTimeWorkRequestBuilder<AlignWorker>()
-                .setInputData(workDataOf(KEY_BOOK to bookId, KEY_NOW to now))
+                .setInputData(workDataOf(KEY_BOOK to bookId, KEY_NOW to now, KEY_KEEP_LANG to keepLanguage))
                 .setConstraints(c).setBackoffCriteria(BackoffPolicy.LINEAR, BACKOFF_MINUTES, TimeUnit.MINUTES).build())
         }
 

@@ -98,9 +98,10 @@ fun ManageTextScreen(bookId: String, onBack: () -> Unit) {
                 }
             }
             Offset(r) { scope.launch { app.db.text().setOffset(bookId, it, System.currentTimeMillis()) } }
+            VoskOffer(r.lang)
             Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
                 ActionRow(0, "Language", langName(r.lang), trailing = Icons.Rounded.ExpandMore, onClick = { language = true })
-                ActionRow(1, "Match again", leading = Icons.Rounded.Refresh, onClick = { Matching.enqueue(ctx, bookId, false) })
+                ActionRow(1, "Match again", leading = Icons.Rounded.Refresh, onClick = { Matching.enqueue(ctx, bookId, false, keepLanguage = true) })
                 ActionRow(2, "Replace text", leading = Icons.Rounded.SwapHoriz, onClick = import::pick)
                 ActionRow(3, "Remove text", leading = Icons.Rounded.Delete, danger = true, onClick = { removing = true })
             }

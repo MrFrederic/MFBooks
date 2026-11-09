@@ -57,6 +57,7 @@ import app.mfbooks.ui.text.PanelButtons
 import app.mfbooks.ui.text.TextImportHost
 import app.mfbooks.ui.text.TextImportState
 import app.mfbooks.ui.text.TextProblem
+import app.mfbooks.ui.text.VoskOffer
 import app.mfbooks.ui.text.languageChoices
 import app.mfbooks.ui.text.megabytes
 import app.mfbooks.ui.text.openReader
@@ -114,12 +115,26 @@ private fun ColumnScope.RowState(book: Book, row: BookText, settings: Settings, 
     val startNow = { Matching.enqueue(ctx, book.id, true) }
     when (row.state) {
         TextState.ALIGNING -> MatchingCard(book, row, read, onManage)
-        TextState.QUEUED -> Waiting(if (settings.matchWhen == MatchWhen.ANY) "Waiting to start" else "Waiting for charger", null, read, startNow, onManage)
-        TextState.PAUSED -> if (row.error == Matching.NEEDS_VOSK) VoskNeeded(book.id, row.lang, read, onManage) else Waiting("Matching paused", row.error, read, startNow, onManage)
+        TextState.QUEUED -> {
+            val downloading = row.lang in Matching.downloads.collectAsState().value
+            Waiting(if (downloading) "Waiting for download" else if (settings.matchWhen == MatchWhen.ANY) "Waiting to start" else "Waiting for charger", null, read, startNow, onManage)
+            VoskOffer(row.lang, Modifier.padding(top = 14.dp), matchBook = book.id, matchNow = false)
+        }
+        TextState.PAUSED -> {
+            val version by Matching.modelsVersion.collectAsState()
+            val waitingForVosk = row.error == Matching.NEEDS_VOSK
+            val missing = remember(version, row.lang) { Matching.voskDownloadBytes(ctx, row.lang) > 0 }
+            if (waitingForVosk && missing) VoskNeeded(book.id, row.lang, read, onManage)
+            else {
+                Waiting("Matching paused", row.error.takeUnless { waitingForVosk }, read, startNow, onManage)
+                VoskOffer(row.lang, Modifier.padding(top = 14.dp))
+            }
+        }
         TextState.NO_MATCH -> {
             Text("Text doesn't match the audio", style = MaterialTheme.typography.titleMedium)
             Body(row.error ?: "${percent(row.coverage)}% matched")
             PanelButtons("Replace text", import::pick, "Change language", { language = true })
+            VoskOffer(row.lang, Modifier.padding(top = 14.dp))
             TextButton({ scope.launch { app.db.text().setState(book.id, TextState.PARSED, null, System.currentTimeMillis()) } }, Modifier.fillMaxWidth().height(44.dp)) {
                 Text("Keep approximate sync")
             }
@@ -127,6 +142,7 @@ private fun ColumnScope.RowState(book: Book, row: BookText, settings: Settings, 
         TextState.AUDIO_CHANGED -> {
             Text("The audio has changed", style = MaterialTheme.typography.titleMedium)
             Button({ Matching.enqueue(ctx, book.id, false) }, Modifier.fillMaxWidth().padding(top = 14.dp).height(44.dp)) { Text("Match again") }
+            VoskOffer(row.lang, Modifier.padding(top = 14.dp))
         }
         TextState.READY -> {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -145,7 +161,7 @@ private fun ColumnScope.RowState(book: Book, row: BookText, settings: Settings, 
     }
     if (language) ChoiceDialog("Language", languageChoices(row.lang), row.lang, { l ->
         language = false
-        scope.launch { app.db.text().setLang(book.id, l, System.currentTimeMillis()); Matching.enqueue(ctx, book.id, false) }
+        scope.launch { app.db.text().setLang(book.id, l, System.currentTimeMillis()); Matching.enqueue(ctx, book.id, false, keepLanguage = true) }
     }, { language = false })
 }
 

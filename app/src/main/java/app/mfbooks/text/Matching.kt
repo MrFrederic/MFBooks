@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 class SpeechModelInfo(val lang: String, val name: String, val sizeBytes: Long, val installed: Boolean)
 
@@ -27,23 +28,49 @@ object Matching {
     val downloadFailed = MutableStateFlow<Set<String>>(emptySet())
 
     /** Fetch Vosk for [lang], the only way it reaches the phone. [matchBook] continues that book's matching afterwards. */
-    fun downloadVosk(context: Context, lang: String, matchBook: String? = null) {
-        if (ModelStore.spec(lang) == null || lang in downloads.value) return
+    fun downloadVosk(context: Context, lang: String, matchBook: String? = null, matchNow: Boolean = true) {
+        if (ModelStore.spec(lang) == null) return
+        if (matchBook != null) afterDownload[matchBook] = Waiting(lang, matchNow, false)
+        if (lang in downloads.value) return
         downloads.update { it + (lang to 0f) }
         downloadFailed.update { it - lang }
-        VoskDownloadWorker.enqueue(context, lang, matchBook)
+        VoskDownloadWorker.enqueue(context, lang)
+    }
+
+    private class Waiting(val lang: String, val now: Boolean, val keepLanguage: Boolean)
+    /** Books to match once their language's download ends, so a run started mid-download gets the better engine. */
+    private val afterDownload = ConcurrentHashMap<String, Waiting>()
+
+    /** The download ended, either way. If it failed, these books still match with whatever engine they can. */
+    internal fun downloadEnded(context: Context, lang: String) {
+        afterDownload.entries.filter { it.value.lang == lang }.forEach { (book, w) ->
+            afterDownload.remove(book)
+            start(context, book, w.now, w.keepLanguage)
+        }
     }
 
     fun voskDownloadBytes(context: Context, lang: String): Long = ModelStore.spec(lang)?.let { ModelStore.downloadBytes(context, it) } ?: 0
 
-    /** Queue matching for a book. [now] ignores the "run matching" constraint. */
-    fun enqueue(context: Context, bookId: String, now: Boolean) {
+    /** Queue matching for a book. [now] ignores the "run matching" constraint. [keepLanguage]: the user set the language, don't detect it. */
+    fun enqueue(context: Context, bookId: String, now: Boolean, keepLanguage: Boolean = false) {
+        val app = MFBooksApp.get(context)
+        scope.launch {
+            val row = app.db.text().text(bookId)
+            if (row != null && row.lang in downloads.value && app.prefs.now().speechEngine != SpeechEnginePref.ANDROID) {
+                app.db.text().setState(bookId, TextState.QUEUED, null, System.currentTimeMillis())
+                afterDownload[bookId] = Waiting(row.lang, now, keepLanguage)
+                AlignWorker.cancel(app, bookId)
+            } else start(context, bookId, now, keepLanguage)
+        }
+    }
+
+    private fun start(context: Context, bookId: String, now: Boolean, keepLanguage: Boolean) {
         val app = MFBooksApp.get(context)
         scope.launch {
             // Before the work is replaced: the old worker must not see ALIGNING and write PAUSED over the new run.
             app.db.text().setState(bookId, TextState.QUEUED, null, System.currentTimeMillis())
             // With the whole transcript saved this only takes seconds, so it doesn't wait for a charger.
-            AlignWorker.enqueue(app, bookId, app.prefs.now().matchWhen, now || transcriptComplete(app, bookId))
+            AlignWorker.enqueue(app, bookId, app.prefs.now().matchWhen, now || transcriptComplete(app, bookId), keepLanguage)
         }
     }
 
@@ -59,6 +86,7 @@ object Matching {
     /** Stop now, keep the transcript and the map. Resume through [enqueue]. */
     fun pause(context: Context, bookId: String) {
         val app = MFBooksApp.get(context)
+        afterDownload.remove(bookId)
         scope.launch {
             app.db.text().setState(bookId, TextState.PAUSED, null, System.currentTimeMillis())
             AlignWorker.cancel(app, bookId)
@@ -68,6 +96,7 @@ object Matching {
     /** Stop the job and forget that it was running. Deletes nothing. */
     fun cancel(context: Context, bookId: String) {
         val app = MFBooksApp.get(context)
+        afterDownload.remove(bookId)
         scope.launch {
             val row = app.db.text().text(bookId)
             val state = if (row != null && row.syncTier == SyncTier.ALIGNED && row.coverage > 0f) TextState.READY else TextState.PARSED
@@ -77,8 +106,8 @@ object Matching {
     }
 
     /** Spoken language ("ru", "en") from three audio samples, or null if the phone can't detect it. */
-    suspend fun detectSpokenLanguage(context: Context, bookId: String): String? =
-        detectSpoken(context, MFBooksApp.get(context).db.library().tracks(bookId))
+    suspend fun detectSpokenLanguage(context: Context, bookId: String, textLang: String): String? =
+        detectSpoken(context, MFBooksApp.get(context).db.library().tracks(bookId), textLang)
 
     /** The phone has an on-device recogniser on Android 14+. Controls whether the Android choice is offered. */
     fun androidEngineAvailable(context: Context): Boolean = androidRecognizerAvailable(context)

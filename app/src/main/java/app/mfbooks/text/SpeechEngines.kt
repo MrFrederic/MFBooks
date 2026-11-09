@@ -106,6 +106,7 @@ private suspend fun recognise(
             val words = ArrayList<SpokenWord>()
             var last = -1L
             fun take(b: Bundle) {
+                if (onLanguage != null) return // detecting: only the language matters, phones without word timings still report it
                 val parts = b.getParcelableArrayList(SpeechRecognizer.RECOGNITION_PARTS, RecognitionPart::class.java)
                 if (parts.isNullOrEmpty()) {
                     if (!b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().isNullOrBlank())
@@ -270,7 +271,7 @@ private const val DETECT_SAMPLE_MS = 30_000L
 private const val DETECT_SESSION_MS = 8_000L
 
 /** "ru"/"en" by majority over three samples of the book, or null: below API 34, on any failure, or past the budget. */
-suspend fun detectSpoken(context: Context, tracks: List<Track>): String? {
+suspend fun detectSpoken(context: Context, tracks: List<Track>, textLang: String): String? {
     if (Build.VERSION.SDK_INT < 34 || !androidRecognizerAvailable(context) || tracks.isEmpty()) return null
     if (!RecognizerSlots.permits.tryAcquire()) return null
     val votes = ArrayList<String?>()
@@ -281,7 +282,7 @@ suspend fun detectSpoken(context: Context, tracks: List<Track>): String? {
                 PcmReader(context, tracks) { !isActive }.use { reader ->
                     for (at in listOf(0.1, 0.5, 0.8)) {
                         val from = (audioMs * at).toLong()
-                        votes += detectOne(context, reader.read(from, minOf(from + DETECT_SAMPLE_MS, audioMs)))
+                        votes += detectOne(context, reader.read(from, minOf(from + DETECT_SAMPLE_MS, audioMs)), localeOf(textLang) ?: ALLOWED[0])
                     }
                 }
             }
@@ -293,10 +294,10 @@ suspend fun detectSpoken(context: Context, tracks: List<Track>): String? {
 }
 
 @RequiresApi(34)
-private suspend fun detectOne(context: Context, pcm: ShortArray): String? {
+private suspend fun detectOne(context: Context, pcm: ShortArray, session: String): String? {
     var found: String? = null
     try {
-        recognise(context, pcm, ALLOWED[0], DETECT_SESSION_MS, {
+        recognise(context, pcm, session, DETECT_SESSION_MS, { // the phone needs a pack for the session language, and the text's is the likeliest
             putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true)
             putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES, ALLOWED)
         }) { b ->
