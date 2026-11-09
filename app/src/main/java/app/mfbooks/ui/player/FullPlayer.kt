@@ -3,6 +3,11 @@
 package app.mfbooks.ui.player
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.automirrored.rounded.Article
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.shrinkVertically
@@ -244,19 +249,9 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
             }
             AnimatedVisibility(!focus, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    ToolRow(np, locked, onCollapse, actions)
+                    ToolRow(np, locked, onCollapse, actions, textView, readable != null, onViewChange = { textChosen.value = it },
+                        onReadingSettings = { sheet = Sheet.Reading }, onFocus = { focus = true })
                     PlayingOnStrip()
-                    if (readable != null) Box(Modifier.fillMaxWidth().height(48.dp), Alignment.Center) {
-                        ViewSwitch(textView, onChange = { textChosen.value = it }, Modifier.align(Alignment.Center))
-                        // Fades, so the row keeps its layout in both views.
-                        val reading by animateFloatAsState(if (textView) 1f else 0f, label = "readingTools")
-                        if (reading > 0f) Row(Modifier.align(Alignment.CenterEnd).graphicsLayer { alpha = reading }) {
-                            AaButton(textView && !locked) { sheet = Sheet.Reading }
-                            HoldIconButton({ focus = true }, {}, "Focus reading", 44.dp, RoundedCornerShape(16.dp), Color.Transparent, Modifier.size(44.dp, 48.dp), enabled = textView && !locked) {
-                                Icon(Icons.Rounded.CenterFocusStrong, null)
-                            }
-                        }
-                    }
 
                     // Whole-book block: title, thin progress bar, "Read x of y · n% · Left z".
                     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -390,39 +385,30 @@ private fun secLabel(sec: Int) = if (sec >= 60 && sec % 60 == 0) "${sec / 60} m"
 
 /** Compact tool row: collapse, then rarely-used quick toggles as small icons. Locked: all but collapse and the lock itself are disabled. */
 @Composable
-private fun ToolRow(np: NowPlaying, locked: Boolean, onCollapse: () -> Unit, a: ToolActions) {
+private fun ToolRow(np: NowPlaying, locked: Boolean, onCollapse: () -> Unit, a: ToolActions, textView: Boolean, hasText: Boolean,
+                    onViewChange: (Boolean) -> Unit, onReadingSettings: () -> Unit, onFocus: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     var menu by remember { mutableStateOf(false) }
-    val sleepOn = np.sleep.mode != SleepMode.Off
+    val context = LocalContext.current
+    val castAvailable = remember { CastSupport.init(context) }
     val none = Color.Transparent
-    // Active toggles are filled primary; HoldIconButton picks the matching on-colour for the icon.
-    val active = cs.primary
     val h = 44.dp
     Row(
         Modifier.fillMaxWidth().padding(top = 4.dp)
             .pointerInput(Unit) { var dy = 0f; detectDragGestures(onDragStart = { dy = 0f }, onDragEnd = { if (dy > 80f) onCollapse() }) { _, d -> dy += d.y } },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val m = Modifier.weight(1f).height(h)
+        val m = Modifier.size(h)
         HoldIconButton(onCollapse, {}, "Collapse player", h, RoundedCornerShape(16.dp), none, m) { Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(28.dp)) }
-        HoldIconButton(a.onSleep, a.onSleepLong, "Sleep timer. Long press to toggle", h, RoundedCornerShape(16.dp), if (sleepOn) active else none, m, enabled = !locked) { SleepGlyph(np) }
-        HoldIconButton(a.onBoost, {}, if (np.boostMb > 0) "Volume boost +${np.boostMb / 100} dB" else "Volume boost", h, RoundedCornerShape(16.dp), if (np.boostMb > 0) active else none, m, enabled = !locked) {
-            Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, Modifier.size(22.dp))
-        }
-        HoldIconButton(a.onEq, {}, "Equalizer", h, RoundedCornerShape(16.dp), none, m, enabled = !locked) { Icon(Icons.Rounded.Equalizer, null, Modifier.size(22.dp)) }
-        HoldIconButton(a.onSpeed, a.onSpeedLong, "Playback speed ${speedLabel(np.speed)}. Long press to toggle", h, RoundedCornerShape(16.dp), if (np.speed != 1f) active else none,
-            Modifier.weight(1.3f).height(h), enabled = !locked) {
-            Text(speedLabel(np.speed), style = MaterialTheme.typography.labelLarge.merge(tnum), maxLines = 1)
-        }
-        HoldIconButton(a.onBookmarks, a.onBookmarkAdd, "Bookmarks. Long press to add a bookmark", h, RoundedCornerShape(16.dp), none, m, enabled = !locked) {
-            Icon(Icons.Rounded.Bookmarks, null, Modifier.size(22.dp))
-        }
+        if (hasText) ViewSwitch(textView, onViewChange)
+        Spacer(Modifier.weight(1f))
+        HoldIconButton(a.onSleep, a.onSleepLong, "Sleep timer. Long press to toggle", h, RoundedCornerShape(16.dp), if (np.sleep.mode != SleepMode.Off) cs.primary else none, m, enabled = !locked) { SleepGlyph(np) }
         HoldIconButton(a.onLock, {}, if (locked) "Unlock controls" else "Lock controls", h, RoundedCornerShape(16.dp), if (locked) cs.errorContainer else none, m,
             content = if (locked) cs.error else null) {
             Icon(if (locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen, null, Modifier.size(22.dp))
         }
         if (a.onConnect != null) HoldIconButton(a.onConnect, {}, "Devices", h, RoundedCornerShape(16.dp), none, m) { Icon(Icons.Rounded.Devices, null, Modifier.size(22.dp)) }
-        CastButton(m)
+        else CastButton(m)
         Box(m) {
             HoldIconButton({ menu = true }, {}, "More options", h, RoundedCornerShape(16.dp), none, Modifier.fillMaxWidth().height(h), enabled = !locked) {
                 Icon(Icons.Rounded.MoreVert, null)
@@ -431,12 +417,25 @@ private fun ToolRow(np: NowPlaying, locked: Boolean, onCollapse: () -> Unit, a: 
                 @Composable fun item(text: String, icon: ImageVector, trailing: Boolean = false, onClick: () -> Unit) = DropdownMenuItem(
                     { Text(text) }, { menu = false; onClick() }, leadingIcon = { Icon(icon, null) },
                     trailingIcon = if (trailing) { { Icon(Icons.Rounded.Check, "On") } } else null)
-                item("Chapters", Icons.AutoMirrored.Rounded.FormatListBulleted, onClick = a.onChapters)
-                item("Add bookmark with note", Icons.Rounded.BookmarkAdd, onClick = a.onAddWithNote)
+                if (textView) {
+                    item("Reading settings", Icons.Rounded.TextFields, onClick = onReadingSettings)
+                    item("Focus reading", Icons.Rounded.CenterFocusStrong, onClick = onFocus)
+                }
+                item("Playback speed, ${speedLabel(np.speed)}", Icons.Rounded.Speed, onClick = a.onSpeed)
+                item("Volume boost", Icons.AutoMirrored.Rounded.VolumeUp, trailing = np.boostMb > 0, onClick = a.onBoost)
+                item("Equalizer", Icons.Rounded.Equalizer, onClick = a.onEq)
                 item("Skip silence", Icons.Rounded.GraphicEq, trailing = np.skipSilence, onClick = a.onSkipSilence)
+                item("Chapters", Icons.AutoMirrored.Rounded.FormatListBulleted, onClick = a.onChapters)
+                item("Bookmarks", Icons.Rounded.Bookmarks, onClick = a.onBookmarks)
+                item("Add bookmark", Icons.Rounded.BookmarkAdd, onClick = a.onBookmarkAdd)
+                item("Add bookmark with note", Icons.Rounded.BookmarkAdd, onClick = a.onAddWithNote)
                 item("History", Icons.Rounded.History, onClick = a.onHistory)
                 item("Book details", Icons.AutoMirrored.Rounded.MenuBook, onClick = a.onDetails)
                 item("Settings", Icons.Rounded.Settings, onClick = a.onSettings)
+                if (a.onConnect != null && castAvailable) Row(Modifier.padding(horizontal = 4.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CastButton(Modifier.size(48.dp))
+                    Text("Cast", style = MaterialTheme.typography.bodyLarge)
+                }
             }
         }
     }
@@ -458,17 +457,17 @@ private fun SleepGlyph(np: NowPlaying) {
     }
 }
 
-/** Connected Cover / Text group, shown only for books that have a text. */
+/** Connected Cover / Text icons, shown only for books that have a text. */
 @Composable
 private fun ViewSwitch(text: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
         ToggleButton(!text, { onChange(false) }, Modifier.height(40.dp).semantics { role = Role.Tab },
-            shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(), contentPadding = PaddingValues(horizontal = 18.dp)) {
-            Text("Cover", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(), contentPadding = PaddingValues(horizontal = 12.dp)) {
+            Icon(Icons.Rounded.Image, "Cover", Modifier.size(20.dp))
         }
         ToggleButton(text, { onChange(true) }, Modifier.height(40.dp).semantics { role = Role.Tab },
-            shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(), contentPadding = PaddingValues(horizontal = 20.dp)) {
-            Text("Text", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(), contentPadding = PaddingValues(horizontal = 12.dp)) {
+            Icon(Icons.AutoMirrored.Rounded.Article, "Text", Modifier.size(20.dp))
         }
     }
 }
