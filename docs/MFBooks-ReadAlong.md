@@ -1,6 +1,6 @@
 # MFBooks Read-Along
 
-**Status:** Proposal v1, 2026-11-09. Nothing here is built yet.
+**Status:** Implemented on `feature/read-along`, 2026-11-09. Not yet tested on a physical phone.
 **Designs:** https://claude.ai/artifact/6SSSivasmku8CeYc9zYrR7
 **Scope:** add a book's text (FB2, EPUB, TXT) to an audiobook, then scroll and highlight that text as the narration plays.
 
@@ -298,6 +298,15 @@ Text works for any book with a `serverId`, including books whose audio was never
 | Word timing error | Median under 300 ms |
 | Coverage on a matching edition | At least 90% of narrated text |
 | APK size increase (Vosk only) | Under 30 MB for `arm64-v8a` |
+
+**First results, Android 14 x86_64 emulator, 2026-11-09:**
+
+| Check | English, 13 min LibriVox | Russian, 20 min LibriVox |
+|---|---|---|
+| Android engine | File input worked without `RECORD_AUDIO`, 60 s of audio took about 2 s, text was good, but no word timings (`RECOGNITION_PARTS` absent), so the probe fell back to Vosk | No on-device ru-RU recogniser, fell back to Vosk |
+| Vosk small | 13 min in about 80 s, 86% of book words matched, 99% of audio synced | Whole 20 min text synced, 85% of book words matched |
+
+Emulator speed says little about a phone. Questions 1 and 5 below are answered for this image. The rest need a real device.
 
 **Android engine questions the spike must answer**, separately for ru-RU and en-US:
 
