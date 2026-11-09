@@ -71,6 +71,7 @@ import kotlin.math.roundToInt
 import app.mfbooks.data.EndOfBook
 import app.mfbooks.data.Settings
 import app.mfbooks.server.Server
+import app.mfbooks.text.ReaderNav
 import app.mfbooks.ui.book.BookDetailScreen
 import app.mfbooks.ui.components.FloatingNav
 import app.mfbooks.ui.components.LocalChromePadding
@@ -151,6 +152,13 @@ private fun Shell(hasBook: Boolean) {
     // A pairing QR code scanned with the camera opens the Server page with the code filled in.
     val pair by Server.pendingPair.collectAsStateWithLifecycle()
     LaunchedEffect(pair) { if (pair != null) nav.navigate("settings/server") { launchSingleTop = true } }
+    // FullPlayer clears this once it shows the book in text view. Another book has to be loaded first, and loading one plays it.
+    val openText by ReaderNav.openText.collectAsStateWithLifecycle()
+    LaunchedEffect(openText) {
+        val id = openText ?: return@LaunchedEffect
+        if (app(ctx).player.state.value.book?.id != id) app(ctx).player.playBook(id)
+        expanded = true
+    }
     LaunchedEffect(Unit) {
         // End of book with "Show library": collapse the player and land on the Library tab.
         app(ctx).player.bookEnded.collect {
