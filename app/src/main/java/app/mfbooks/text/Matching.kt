@@ -21,8 +21,18 @@ object Matching {
         scope.launch {
             // Before the work is replaced: the old worker must not see ALIGNING and write PAUSED over the new run.
             app.db.text().setState(bookId, TextState.QUEUED, null, System.currentTimeMillis())
-            AlignWorker.enqueue(app, bookId, app.prefs.now().matchWhen, now)
+            // With the whole transcript saved this only takes seconds, so it doesn't wait for a charger.
+            AlignWorker.enqueue(app, bookId, app.prefs.now().matchWhen, now || transcriptComplete(app, bookId))
         }
+    }
+
+    private suspend fun transcriptComplete(app: MFBooksApp, bookId: String): Boolean {
+        val tracks = app.db.library().tracks(bookId)
+        val audioMs = tracks.sumOf { it.durationMs }.toInt()
+        val file = app.textStore.transcriptFile(bookId)
+        if (!file.exists() || audioMs == 0) return false
+        val covered = Coverage.merge(Transcript.load(file, audioMs, tracks.size).map { Coverage.range(it.fromMs, it.untilMs) })
+        return Coverage.totalMs(covered) >= audioMs
     }
 
     /** Stop now, keep the transcript and the map. Resume through [enqueue]. */

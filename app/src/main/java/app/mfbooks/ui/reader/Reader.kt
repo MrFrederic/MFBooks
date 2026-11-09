@@ -155,7 +155,9 @@ private const val MAX_EXTRAPOLATE_MS = 1_000L
 // ponytail: map lookups run at 25 Hz, not per frame. SyncMap.at returns an object, and no word is shorter than 40 ms.
 private const val LOOKUP_STEP_MS = 40L
 
-private val BAR_SPRING = spring<Float>(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow * 1.6f)
+private val BAR_SPRING = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+/** A smaller step back is clock disagreement between the 250 ms position update and the frame clock, not a seek. */
+private const val CLOCK_JITTER_MS = 400L
 
 internal fun readerFamily(font: ReaderFont, opsz: Int): FontFamily = when (font) {
     ReaderFont.LITERATA -> {
@@ -316,7 +318,9 @@ private class ReadAlong(val doc: BookTextDoc, val player: PlayerConnection, val 
             }
         }
         val elapsed = if (np.isPlaying) min(MAX_EXTRAPOLATE_MS, (frameNanos - anchorNanos) / 1_000_000) else 0L
-        currentMs = anchorMs + (elapsed * np.speed).toLong()
+        val now = anchorMs + (elapsed * np.speed).toLong()
+        // Stepping back here would flip a sentence to and fro at its boundary and shake the playhead.
+        currentMs = if (np.isPlaying && now < currentMs && currentMs - now < CLOCK_JITTER_MS) currentMs else now
         val lookup = currentMs + offsetMs + LEAD_MS
         if (abs(lookup - lastLookup) < LOOKUP_STEP_MS) return
         lastLookup = lookup
@@ -361,8 +365,9 @@ private class ReadAlong(val doc: BookTextDoc, val player: PlayerConnection, val 
     private fun slideBar(g: Geometry?) {
         if (reduced || g == null || !g.hasSentence || drawnTop.isNaN()) return
         val item = itemInfo(activeBlock) ?: return
-        val dTop = drawnTop - (item.offset + g.barTop)
-        val dBottom = drawnBottom - (item.offset + g.barBottom)
+        val pad = list.layoutInfo.beforeContentPadding
+        val dTop = drawnTop - (pad + item.offset + g.barTop)
+        val dBottom = drawnBottom - (pad + item.offset + g.barBottom)
         if (abs(dTop) > list.layoutInfo.viewportSize.height) return
         slide?.cancel()
         slide = scope.launch {
@@ -707,8 +712,9 @@ private fun DrawScope.drawPlayhead(ra: ReadAlong) {
     val item = ra.itemInfo(ra.activeBlock) ?: return
     val g = ra.geometry() ?: return
     if (!g.hasSentence) { ra.drawnTop = Float.NaN; return }
-    val top = item.offset + g.barTop + ra.deltaTop.value
-    val bottom = item.offset + g.barBottom + ra.deltaBottom.value
+    val pad = ra.list.layoutInfo.beforeContentPadding // item offsets start after the list's top padding
+    val top = pad + item.offset + g.barTop + ra.deltaTop.value
+    val bottom = pad + item.offset + g.barBottom + ra.deltaBottom.value
     ra.drawnTop = top; ra.drawnBottom = bottom
     drawRoundRect(look.playhead, Offset(x, top), Size(w, (bottom - top).coerceAtLeast(w)), r)
 }

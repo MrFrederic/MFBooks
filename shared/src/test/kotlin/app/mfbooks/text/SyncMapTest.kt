@@ -55,8 +55,8 @@ class SyncMapTest {
         assertNotNull(SyncMap.of(doc, listOf(SyncTrack("renamed", 10_000), SyncTrack("2", 11_500))))
     }
 
-    @Test fun coverageCountsWordRanges() {
-        assertEquals(0.75f, doc.coverage(), 0.001f)
+    @Test fun coverageIsTheShareOfAudioInWordRanges() {
+        assertEquals(0.45f, doc.coverage(), 0.001f) // 5 s + 4 s of 20 s
         assertEquals(0f, doc.copy(ranges = emptyList()).coverage(), 0f)
     }
 

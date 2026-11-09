@@ -151,6 +151,7 @@ import app.mfbooks.ui.reader.readerFamily
 import app.mfbooks.ui.server.ConnectSheet
 import app.mfbooks.ui.server.PlayingOnStrip
 import app.mfbooks.ui.theme.LocalGlow
+import app.mfbooks.ui.theme.comfortable
 
 private enum class Sheet { Speed, Sleep, Eq, Boost, Bookmark, Lists, Reading }
 
@@ -227,7 +228,12 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
 
     Box(modifier.fillMaxSize().background(cs.background)) {
         // Same blurred-cover haze as the book page, stretched over the whole player.
-        if (!focus) CoverBackdrop(book.coverUri, book.seedColor, Modifier.fillMaxSize())
+        if (textView) {
+            // A short glow only: a wash behind the text muddies the narrated and upcoming greys.
+            val glow = LocalGlow.current
+            val tint = book.seedColor?.let { comfortable(Color(it), glow.dark) } ?: glow.color
+            if (!focus) Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to tint.copy(alpha = if (glow.dark) 0.45f else 0.3f), 0.36f to Color.Transparent)))
+        } else CoverBackdrop(book.coverUri, book.seedColor, Modifier.fillMaxSize())
         if (textView && readable != null) {
             Column(Modifier.fillMaxSize().statusBarsPadding().then(if (focus) Modifier else Modifier.navigationBarsPadding().padding(bottom = 8.dp))) {
                 if (focus) FocusHeader(chapterTitle, !locked, onExit = { focus = false }, onReadingSettings = { sheet = Sheet.Reading })

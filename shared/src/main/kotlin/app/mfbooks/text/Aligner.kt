@@ -452,11 +452,19 @@ class SyncMap private constructor(
 
 fun SyncDoc.withUserKnot(knot: UserKnot): SyncDoc = withUserKnots(user + knot)
 
-/** Fraction of the text with word-level timing, 0..1. */
+/** Fraction of the audio with word-level timing, 0..1. By time, so licence pages and appendices nobody narrates don't count against a book. */
 fun SyncDoc.coverage(): Float {
-    val total = ranges.sumOf { (it.toChar - it.fromChar).toLong() }
-    if (total == 0L) return 0f
-    return ranges.filter { it.kind == RangeKind.WORD }.sumOf { (it.toChar - it.fromChar).toLong() }.toFloat() / total
+    val totalMs = tracks.sumOf { it.durationMs }
+    val cs = undelta(chars)
+    val ts = undelta(ms)
+    if (totalMs == 0L || cs.isEmpty()) return 0f
+    fun at(c: Int): Long {
+        val i = cs.binarySearch(c).let { if (it >= 0) it else -it - 2 }
+        if (i < 0) return ts.first().toLong()
+        if (i >= cs.lastIndex) return ts.last().toLong()
+        return ts[i] + (c - cs[i]).toLong() * (ts[i + 1] - ts[i]) / maxOf(1, cs[i + 1] - cs[i])
+    }
+    return (ranges.filter { it.kind == RangeKind.WORD }.sumOf { at(it.toChar) - at(it.fromChar) }.toFloat() / totalMs).coerceIn(0f, 1f)
 }
 
 private fun SyncDoc.withUserKnots(knots: List<UserKnot>): SyncDoc {
