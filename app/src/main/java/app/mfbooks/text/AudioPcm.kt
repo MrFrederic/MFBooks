@@ -1,12 +1,15 @@
+@file:OptIn(UnstableApi::class)
+
 package app.mfbooks.text
 
 import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
-import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.inspector.MediaExtractorCompat
 import app.mfbooks.convert.Resampler
 import app.mfbooks.data.Track
 import app.mfbooks.server.Server
@@ -59,7 +62,7 @@ class PcmReader(private val context: Context, private val tracks: List<Track>, p
 
 /** One file from [startMs]: the extract → decode → downmix → [Resampler] steps of OpusTranscoder, without the encoder. */
 private class TrackDecoder(context: Context, track: Track, startMs: Long, private val cancelled: () -> Boolean) : Closeable {
-    private val ex = MediaExtractor()
+    private val ex = MediaExtractorCompat(context) // the player's parser: the platform one finds no audio in some long m4b files
     private var fd: ParcelFileDescriptor? = null
     private var dec: MediaCodec? = null
     private val info = MediaCodec.BufferInfo()
@@ -91,7 +94,7 @@ private class TrackDecoder(context: Context, track: Track, startMs: Long, privat
                 // estimate, because walking would download everything before the seek point.
                 if (mime == MediaFormat.MIMETYPE_AUDIO_MPEG && !track.isRemote) {
                     while (ex.sampleTime != -1L && ex.sampleTime < seekUs) { check(); if (!ex.advance()) break }
-                } else ex.seekTo(seekUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+                } else ex.seekTo(seekUs, MediaExtractorCompat.SEEK_TO_PREVIOUS_SYNC)
             }
             val anchor = ex.sampleTime.takeIf { it != -1L } ?: target
             dropUs = (target - anchor).coerceAtLeast(0)

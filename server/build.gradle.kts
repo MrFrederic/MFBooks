@@ -4,7 +4,7 @@ plugins {
     application
 }
 
-version = "0.3.0"
+version = "0.3.1"
 kotlin { jvmToolchain(21) }
 application { mainClass = "app.mfbooks.server.MainKt" }
 

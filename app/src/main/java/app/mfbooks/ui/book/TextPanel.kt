@@ -117,7 +117,7 @@ private fun ColumnScope.RowState(book: Book, row: BookText, settings: Settings, 
         TextState.ALIGNING -> MatchingCard(book, row, read, onManage)
         TextState.QUEUED -> {
             val downloading = row.lang in Matching.downloads.collectAsState().value
-            Waiting(if (downloading) "Waiting for download" else if (settings.matchWhen == MatchWhen.ANY) "Waiting to start" else "Waiting for charger", null, read, startNow, onManage)
+            Waiting(if (downloading) "Waiting for download" else row.error ?: if (settings.matchWhen == MatchWhen.CHARGING) "Waiting for charger" else "Waiting to start", null, read, startNow, onManage)
             VoskOffer(row.lang, Modifier.padding(top = 14.dp), matchBook = book.id, matchNow = false)
         }
         TextState.PAUSED -> {

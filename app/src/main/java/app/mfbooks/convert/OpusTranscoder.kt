@@ -1,5 +1,8 @@
+@file:OptIn(UnstableApi::class)
+
 package app.mfbooks.convert
 
+import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaDataSource
@@ -7,6 +10,8 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.os.SystemClock
 import android.util.Log
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.inspector.MediaExtractorCompat
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.DataInputStream
@@ -31,7 +36,7 @@ import kotlin.coroutines.cancellation.CancellationException
 class SourceInfo(val mime: String, val durationMs: Long, val channels: Int, val sampleRate: Int)
 
 /**
- * MP3/AAC → Ogg/Opus with platform APIs only (§4.6 steps 3–5): MediaExtractor + MediaCodec decode,
+ * MP3/AAC → Ogg/Opus (§4.6 steps 3–5): Media3's extractor (the player's parser: the platform one finds no audio in some long m4b files) + MediaCodec decode,
  * [Resampler] to 48 kHz, MediaCodec Opus encoder, [OggOpusWriter] (not MediaMuxer OGG: see there). Blocking.
  *
  * Speed: the platform Opus encoder is single-threaded and is the bottleneck, so a file is cut into time chunks
@@ -57,11 +62,11 @@ object OpusTranscoder {
     val maxParallel get() = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
 
     /** Probe without decoding: first audio track's mime and container duration. null = no audio track. */
-    fun probe(src: FileDescriptor): SourceInfo? {
-        val ex = MediaExtractor()
+    fun probe(context: Context, src: FileDescriptor): SourceInfo? {
+        val ex = MediaExtractorCompat(context)
         try {
             ex.setDataSource(src)
-            val t = audioTrack(ex) ?: return null
+            val t = audioTrack(ex.trackCount, ex::getTrackFormat) ?: return null
             val f = ex.getTrackFormat(t)
             return SourceInfo(f.getString(MediaFormat.KEY_MIME)!!, f.longOr(MediaFormat.KEY_DURATION, 0) / 1000,
                 f.intOr(MediaFormat.KEY_CHANNEL_COUNT, 2), f.intOr(MediaFormat.KEY_SAMPLE_RATE, 44100))
@@ -75,18 +80,18 @@ object OpusTranscoder {
      * directory again to resume, delete it after success (null = a temporary one, deleted here).
      */
     fun transcode(
-        src: FileDescriptor, dst: FileDescriptor, comments: List<Pair<String, String>>,
+        context: Context, src: FileDescriptor, dst: FileDescriptor, comments: List<Pair<String, String>>,
         progress: (Float) -> Unit, cancelled: () -> Boolean, workDir: File? = null, parallel: Int = maxParallel,
     ): SourceInfo {
         val t0 = SystemClock.elapsedRealtime()
         // Positional reads (pread) through our own read-ahead: thread-safe for several extractors on one fd, and
         // no tiny per-sample reads through FUSE. Not closed here: the caller owns the descriptor.
         val channel = FileInputStream(src).channel
-        val probe = MediaExtractor()
+        val probe = MediaExtractorCompat(context)
         val track: Int; val inFmt: MediaFormat; val firstUs: Long
         try {
             probe.setDataSource(PreadSource(channel))
-            track = audioTrack(probe) ?: error("no audio track")
+            track = audioTrack(probe.trackCount, probe::getTrackFormat) ?: error("no audio track")
             inFmt = probe.getTrackFormat(track)
             probe.selectTrack(track)
             firstUs = probe.sampleTime.takeIf { it != -1L } ?: 0 // may be negative: an edit list trimming encoder priming
@@ -122,7 +127,7 @@ object OpusTranscoder {
             while (true) {
                 var seg: Segment? = null
                 try {
-                    seg = Segment(k, bounds[k], bounds[k + 1], channel, track, firstUs, SpoolSink(File(dir, "$k.pk")), stop)
+                    seg = Segment(context, k, bounds[k], bounds[k + 1], channel, track, firstUs, SpoolSink(File(dir, "$k.pk")), stop)
                     running[k] = seg
                     seg.run()
                     return seg
@@ -199,7 +204,7 @@ object OpusTranscoder {
      * a packet is kept when its position encStart + (samples before it) falls in [from, until).
      */
     private class Segment(
-        val k: Int, val from: Long, val until: Long, val channel: FileChannel, val track: Int, val firstUs: Long,
+        context: Context, val k: Int, val from: Long, val until: Long, val channel: FileChannel, val track: Int, val firstUs: Long,
         val sink: SpoolSink, val globalStop: () -> Boolean,
     ) {
         private val failed = AtomicReference<Throwable?>()
@@ -209,7 +214,7 @@ object OpusTranscoder {
         @Volatile var queued = 0L                      // frames queued to the encoder
         @Volatile var head: ByteArray? = null
         var srcRate = 0; var srcCh = 0; @Volatile var encCap = 0
-        private val ex = MediaExtractor()
+        private val ex = MediaExtractorCompat(context)
         private val dec: MediaCodec
         private lateinit var enc: MediaCodec
         private val encReady = java.util.concurrent.CountDownLatch(1)
@@ -225,7 +230,7 @@ object OpusTranscoder {
                 // is exact. MP4/ADTS seeks use the sample table / frame index, so they are exact.
                 if (f.getString(MediaFormat.KEY_MIME) == MediaFormat.MIMETYPE_AUDIO_MPEG) {
                     while (ex.sampleTime in 0 until target) if (!ex.advance()) break
-                } else ex.seekTo(target, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+                } else ex.seekTo(target, MediaExtractorCompat.SEEK_TO_PREVIOUS_SYNC)
             }
             dec = MediaCodec.createDecoderByType(f.getString(MediaFormat.KEY_MIME)!!).apply { configure(f, null, null, 0); start() }
         }
@@ -433,7 +438,7 @@ object OpusTranscoder {
         val ex = MediaExtractor()
         return try {
             ex.setDataSource(fd)
-            audioTrack(ex)?.let { ex.getTrackFormat(it).longOr(MediaFormat.KEY_DURATION, -1000) / 1000 } ?: -1
+            audioTrack(ex.trackCount, ex::getTrackFormat)?.let { ex.getTrackFormat(it).longOr(MediaFormat.KEY_DURATION, -1000) / 1000 } ?: -1
         } catch (e: Exception) { -1 } finally { ex.release() }
     }
 
@@ -461,8 +466,8 @@ object OpusTranscoder {
         else -> ShortArray(frames * 2) { pcm[(it / 2) * inCh + it % 2] }
     }
 
-    private fun audioTrack(ex: MediaExtractor) =
-        (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
+    private fun audioTrack(count: Int, format: (Int) -> MediaFormat) =
+        (0 until count).firstOrNull { format(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
 
     private fun MediaFormat.intOr(k: String, d: Int) = if (containsKey(k)) getInteger(k) else d
     private fun MediaFormat.longOr(k: String, d: Long) = if (containsKey(k)) getLong(k) else d

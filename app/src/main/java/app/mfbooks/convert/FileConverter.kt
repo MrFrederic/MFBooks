@@ -58,7 +58,7 @@ class FileConverter(private val context: Context) {
         if (entries.any { it.name == outName }) return FileResult.Failed("$outName already exists")
         entries.filter { it.name == tmpName }.forEach { DocumentsContract.deleteDocument(r, it.uri) }
 
-        val info = r.openFileDescriptor(src.uri, "r")?.use { OpusTranscoder.probe(it.fileDescriptor) }
+        val info = r.openFileDescriptor(src.uri, "r")?.use { OpusTranscoder.probe(context, it.fileDescriptor) }
             ?: return FileResult.Failed("can't read ${src.name}")
         val codec = when (info.mime) {
             MediaFormat.MIMETYPE_AUDIO_MPEG -> "mp3"
@@ -108,7 +108,7 @@ class FileConverter(private val context: Context) {
             ?: return FileResult.Failed("can't create $tmpName")
         try {
             r.openFileDescriptor(tmp, "rw")!!.use { out ->
-                r.openFileDescriptor(src.uri, "r")!!.use { inp -> OpusTranscoder.transcode(inp.fileDescriptor, out.fileDescriptor, comments, progress, cancelled, work) }
+                r.openFileDescriptor(src.uri, "r")!!.use { inp -> OpusTranscoder.transcode(context, inp.fileDescriptor, out.fileDescriptor, comments, progress, cancelled, work) }
             }
         } catch (e: Throwable) {
             runCatching { DocumentsContract.deleteDocument(r, tmp) }
