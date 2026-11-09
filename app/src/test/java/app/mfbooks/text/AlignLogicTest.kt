@@ -94,11 +94,11 @@ class AlignLogicTest {
     private fun spoken(n: Int, step: Int = 300, word: String = "the") = List(n) { SpokenWord(word, it * step) }
 
     @Test fun probeAcceptsOnlyAUsableEngine() {
-        assertTrue(ProbeRules.accepts(spoken(20), book, 60_000, 10_000))
-        assertFalse("too few words", ProbeRules.accepts(spoken(19), book, 60_000, 10_000))
-        assertFalse("flat timestamps", ProbeRules.accepts(spoken(30, step = 0), book, 60_000, 10_000))
-        assertFalse("wrong text", ProbeRules.accepts(spoken(30, word = "zzz"), book, 60_000, 10_000))
-        assertFalse("too slow", ProbeRules.accepts(spoken(30), book, 60_000, 30_000))
+        assertTrue(ProbeRules.accepts(spoken(80), book, 60_000, 10_000))
+        assertFalse("dropped speech", ProbeRules.accepts(spoken(46), book, 60_000, 10_000))
+        assertFalse("flat timestamps", ProbeRules.accepts(spoken(100, step = 0), book, 60_000, 10_000))
+        assertFalse("wrong text", ProbeRules.accepts(spoken(100, word = "zzz"), book, 60_000, 10_000))
+        assertFalse("too slow", ProbeRules.accepts(spoken(100), book, 60_000, 30_000))
     }
 
     @Test fun normalisationFoldsCaseAndYo() {

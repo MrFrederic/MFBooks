@@ -177,14 +177,16 @@ fun bookWords(doc: BookTextDoc): Set<String> =
     doc.blocks.flatMapTo(HashSet()) { b -> b.s.split(Regex("\\s+")).map(::normalizeWord).filter { it.isNotEmpty() } }
 
 object ProbeRules {
-    const val MIN_WORDS = 20
+    /** Narrators read 120 to 180 words a minute; far below that means the recogniser dropped speech. */
+    const val MIN_WORDS_PER_MIN = 80.0
     const val MIN_TEXT_MATCH = 0.25
     /** The recogniser must beat this many times realtime, or a 16-hour book takes too long. */
     const val MIN_SPEED = 2.0
 
     fun accepts(words: List<SpokenWord>, book: Set<String>, audioMs: Long, wallMs: Long): Boolean {
-        if (words.size < MIN_WORDS) return false
-        if (words.zipWithNext().any { (a, b) -> b.startMs <= a.startMs }) return false
+        if (words.size < audioMs / 60_000.0 * MIN_WORDS_PER_MIN) return false
+        val steps = words.zipWithNext { a, b -> b.startMs - a.startMs }
+        if (steps.any { it < 0 } || steps.count { it == 0 } > steps.size / 5) return false // an occasional tie is normal
         val normal = words.map { normalizeWord(it.word) }.filter { it.isNotEmpty() }
         if (normal.isEmpty() || normal.count { it in book }.toDouble() / normal.size < MIN_TEXT_MATCH) return false
         return wallMs <= 0 || audioMs.toDouble() / wallMs > MIN_SPEED

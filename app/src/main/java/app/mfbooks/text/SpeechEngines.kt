@@ -6,6 +6,7 @@ import android.media.AudioFormat
 import android.os.Build
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.speech.ModelDownloadListener
 import android.speech.RecognitionListener
 import android.speech.RecognitionPart
@@ -44,7 +45,7 @@ private val ALLOWED = arrayListOf("ru-RU", "en-US")
 
 /** What went wrong, so the worker can choose between falling back and telling the user. */
 class SpeechFailure(val kind: Kind, message: String, cause: Throwable? = null) : Exception(message, cause) {
-    enum class Kind { UNAVAILABLE, PERMISSION, LANGUAGE, NO_PARTS, BAD_TIMESTAMPS, TIMEOUT, ENGINE }
+    enum class Kind { UNAVAILABLE, PERMISSION, LANGUAGE, NO_PARTS, BAD_TIMESTAMPS, TIMEOUT, ENGINE, DROPPED_SPEECH }
 }
 
 /** Turns one chunk of 16 kHz mono 16-bit PCM into words. One chunk at a time per engine. */
@@ -111,7 +112,7 @@ private suspend fun recognise(
                     return
                 }
                 for (p in parts) {
-                    if (p.timestampMillis <= last) {
+                    if (p.timestampMillis < last) { // two short words can share a timestamp
                         result.completeExceptionally(SpeechFailure(SpeechFailure.Kind.BAD_TIMESTAMPS, "The phone's speech recogniser gave unusable word timings"))
                         return
                     }
@@ -157,15 +158,22 @@ private suspend fun recognise(
     }
 }
 
+/** On a Pixel 9 Pro an unpaced pipe made the recogniser lose about 90% of the speech. */
+private const val FEED_SPEED = 5
+
 private fun writePcm(out: ParcelFileDescriptor, pcm: ShortArray) {
     try {
         ParcelFileDescriptor.AutoCloseOutputStream(out).use { stream ->
-            val buf = ByteBuffer.allocate(1 shl 16).order(ByteOrder.LITTLE_ENDIAN)
+            val buf = ByteBuffer.allocate(SAMPLE_RATE * 2).order(ByteOrder.LITTLE_ENDIAN)
+            val started = SystemClock.elapsedRealtime()
             var i = 0
             while (i < pcm.size) {
                 buf.clear()
                 while (i < pcm.size && buf.remaining() >= 2) buf.putShort(pcm[i++])
                 stream.write(buf.array(), 0, buf.position())
+                val dueMs = i * 1000L / SAMPLE_RATE / FEED_SPEED
+                val waitMs = dueMs - (SystemClock.elapsedRealtime() - started)
+                if (waitMs > 0) Thread.sleep(waitMs)
             }
         }
     } catch (e: IOException) { Log.d(TAG, "PCM writer stopped: ${e.message}") } // the session ended first
@@ -202,8 +210,13 @@ class AndroidEngine(private val context: Context, private val locale: String) : 
         }
     }
 
-    override suspend fun transcribe(pcm: ShortArray): List<SpokenWord> =
-        recognise(context, pcm, locale, (pcm.size / (SAMPLE_RATE / 1000) / ProbeRules.MIN_SPEED).toLong() + SESSION_MARGIN_MS)
+    override suspend fun transcribe(pcm: ShortArray): List<SpokenWord> {
+        val words = recognise(context, pcm, locale, (pcm.size / (SAMPLE_RATE / 1000) / ProbeRules.MIN_SPEED).toLong() + SESSION_MARGIN_MS)
+        val minutes = pcm.size / SAMPLE_RATE / 60.0
+        if (minutes >= 2 && words.size < minutes * ProbeRules.MIN_WORDS_PER_MIN / 2) // half the probe's bar: a chunk can hold a music break
+            throw SpeechFailure(SpeechFailure.Kind.DROPPED_SPEECH, "The phone's speech recogniser dropped too much speech")
+        return words
+    }
 
     override fun close() {} // a recogniser lives for one session only
 
