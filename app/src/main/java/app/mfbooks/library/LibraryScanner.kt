@@ -78,7 +78,7 @@ class LibraryScanner(private val context: Context) {
         for (flags in intArrayOf(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION, Intent.FLAG_GRANT_READ_URI_PERMISSION)) {
             try { context.contentResolver.releasePersistableUriPermission(uri, flags); break } catch (e: SecurityException) { }
         }
-        dao.booksInRoot(treeUri).forEach { dao.removeBook(it.id); Covers.file(context, it.id).delete() }
+        dao.booksInRoot(treeUri).forEach { dao.removeBook(it.id); Covers.file(context, it.id).delete(); app.textStore.forget(it.id) }
         dao.rootsNow().firstOrNull { it.uri == treeUri }?.let { dao.deleteRoot(it) }
     }
 
@@ -101,7 +101,7 @@ class LibraryScanner(private val context: Context) {
             val old = HashMap<String, app.mfbooks.data.Book>()
             for (r in roots) for (b in dao.booksInRoot(r.uri)) {
                 // An offloaded book has no audio left in its folder but still streams from the server.
-                if (b.id !in ids && r.uri in okRoots && dao.tracks(b.id).none { it.isRemote }) { dao.removeBook(b.id); Covers.file(context, b.id).delete() } else old[b.id] = b
+                if (b.id !in ids && r.uri in okRoots && dao.tracks(b.id).none { it.isRemote }) { dao.removeBook(b.id); Covers.file(context, b.id).delete(); app.textStore.forget(b.id) } else old[b.id] = b
             }
 
             val tDiscovered = System.currentTimeMillis()
@@ -141,6 +141,7 @@ class LibraryScanner(private val context: Context) {
         Sidecar.importIfNewer(context, dao, c.id, c.entries, sc)
         Sabp.importBook(context, dao, app.db.userData(), c.id, c.entries)
         if (saveSidecar) try { Sidecar.writeScanned(context, c, s, sc, dao) } catch (e: CancellationException) { throw e } catch (e: Exception) { /* read-only tree */ }
+        app.textStore.reconcile(c.id)
     }
 
     /** Walks one root, one child query per folder. false = root unreadable (so its books must not be deleted). */

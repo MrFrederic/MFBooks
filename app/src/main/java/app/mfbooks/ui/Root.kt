@@ -71,6 +71,7 @@ import kotlin.math.roundToInt
 import app.mfbooks.data.EndOfBook
 import app.mfbooks.data.Settings
 import app.mfbooks.server.Server
+import app.mfbooks.text.ReaderNav
 import app.mfbooks.ui.book.BookDetailScreen
 import app.mfbooks.ui.components.FloatingNav
 import app.mfbooks.ui.components.LocalChromePadding
@@ -86,6 +87,7 @@ import app.mfbooks.ui.server.FreeUpScreen
 import app.mfbooks.ui.settings.SettingsPageScreen
 import app.mfbooks.ui.settings.SettingsScreen
 import app.mfbooks.ui.stats.StatsScreen
+import app.mfbooks.ui.text.ManageTextScreen
 import app.mfbooks.ui.theme.MFBooksTheme
 
 private val tabs = listOf("home", "library", "stats")
@@ -151,6 +153,8 @@ private fun Shell(hasBook: Boolean) {
     // A pairing QR code scanned with the camera opens the Server page with the code filled in.
     val pair by Server.pendingPair.collectAsStateWithLifecycle()
     LaunchedEffect(pair) { if (pair != null) nav.navigate("settings/server") { launchSingleTop = true } }
+    val openText by ReaderNav.openText.collectAsStateWithLifecycle()
+    LaunchedEffect(openText) { if (openText != null) expanded = true } // the player clears it once it shows the text
     LaunchedEffect(Unit) {
         // End of book with "Show library": collapse the player and land on the Library tab.
         app(ctx).player.bookEnded.collect {
@@ -171,7 +175,11 @@ private fun Shell(hasBook: Boolean) {
                 page("search") { SearchScreen(::openBook) { nav.popBackStack() } }
                 page("stats") { StatsScreen(::openSettings) }
                 page("book/{id}", listOf(navArgument("id") { type = NavType.StringType })) {
-                    BookDetailScreen(it.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
+                    val id = it.arguments?.getString("id").orEmpty()
+                    BookDetailScreen(id, { nav.navigate("book/$id/text") }) { nav.popBackStack() }
+                }
+                page("book/{id}/text", listOf(navArgument("id") { type = NavType.StringType })) {
+                    ManageTextScreen(it.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
                 }
                 page("settings") { SettingsScreen({ nav.popBackStack() }, nav::navigate) }
                 page("settings/{page}", listOf(navArgument("page") { type = NavType.StringType })) {

@@ -78,7 +78,7 @@ import app.mfbooks.ui.server.BookCloudPanel
 import app.mfbooks.ui.theme.LocalGlow
 
 @Composable
-fun BookDetailScreen(bookId: String, onBack: () -> Unit) {
+fun BookDetailScreen(bookId: String, onManageText: () -> Unit, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val app = app(ctx)
     val items by rememberBookItems()
@@ -129,10 +129,11 @@ fun BookDetailScreen(bookId: String, onBack: () -> Unit) {
                     }
                 }
             }
+            item { TextPanel(b, onManageText, Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 24.dp)) }
             if (b.state == BookState.STARTED || loaded) item {
                 val pos = if (loaded) now.positionInBookMs else item.positionMs
                 val frac = if (b.durationMs > 0) (pos.toFloat() / b.durationMs).coerceIn(0f, 1f) else 0f
-                Panel(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 24.dp)) {
+                Panel(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("${(frac * 100).toInt()}%", style = MaterialTheme.typography.headlineSmallEmphasized.tabular(), color = MaterialTheme.colorScheme.primary)
                         Text("${formatHm(b.durationMs - pos)} left", Modifier.padding(start = 12.dp).weight(1f), style = MaterialTheme.typography.bodyMedium.tabular(),

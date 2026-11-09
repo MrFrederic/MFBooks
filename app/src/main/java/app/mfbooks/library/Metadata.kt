@@ -35,8 +35,12 @@ class Candidate(
     private fun isSidecar(e: DocEntry) = e.ext in IMAGE_EXTENSIONS || e.ext == "nfo" || e.ext == "cue" ||
         e.name.lowercase() in setOf("info.txt", "openbook.json", "libby.txt")
     val sidecars = entries.filter(::isSidecar)
+    val ebooks = entries.filter { isEbookCandidate(it.name, it.size) }
+
+    /** Books with no ebook or text mirror keep the signature they had. Mirrors count by name only: the app rewrites them as matching runs. */
     fun signature(useTagTitles: Boolean) = sha1(
-        "v2|$useTagTitles\n" + (audio + sidecars).sortedBy { it.name }.joinToString("\n") { "${it.name}|${it.size}|${it.mtime}" },
+        "v2|$useTagTitles\n" + (audio + sidecars + ebooks).sortedBy { it.name }.joinToString("\n") { "${it.name}|${it.size}|${it.mtime}" } +
+            entries.filter { it.name in TEXT_MIRRORS }.map { it.name }.sorted().joinToString("") { "\n$it" },
     )
 }
 

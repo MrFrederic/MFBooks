@@ -16,11 +16,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.OutputStream
 
 /** `.mfbooks.json` per book folder (§4.5). Unknown keys are preserved on rewrite. */
 object Sidecar {
     const val NAME = ".mfbooks.json"
-    private const val TMP = "$NAME.tmp"
     private val lock = Mutex()
 
     fun read(context: Context, entry: DocEntry): JSONObject? =
@@ -137,13 +137,17 @@ object Sidecar {
         if (dao.settings(bookId) == null) (loaded ?: read(context, e))?.optJSONObject("settings")?.let { dao.upsertSettings(settingsFrom(bookId, it)) }
     }
 
+    private suspend fun write(context: Context, folder: Uri, entries: List<DocEntry>, doc: JSONObject) =
+        writeFile(context, folder, entries, NAME) { it.write(doc.toString(1).toByteArray()) }
+
     /** tmp + rename; the provider is asked to delete the old file first since rename doesn't overwrite. */
-    private suspend fun write(context: Context, folder: Uri, entries: List<DocEntry>, doc: JSONObject) = lock.withLock {
+    suspend fun writeFile(context: Context, folder: Uri, entries: List<DocEntry>, name: String, content: (OutputStream) -> Unit) = lock.withLock {
         val r = context.contentResolver
-        entries.firstOrNull { it.name == TMP }?.let { DocumentsContract.deleteDocument(r, it.uri) }
-        val tmp = DocumentsContract.createDocument(r, folder, "application/octet-stream", TMP) ?: return@withLock
-        r.openOutputStream(tmp, "wt")!!.use { it.write(doc.toString(1).toByteArray()) }
-        entries.firstOrNull { it.name == NAME }?.let { DocumentsContract.deleteDocument(r, it.uri) }
-        DocumentsContract.renameDocument(r, tmp, NAME)
+        val tmpName = "$name.tmp"
+        entries.firstOrNull { it.name == tmpName }?.let { DocumentsContract.deleteDocument(r, it.uri) }
+        val tmp = DocumentsContract.createDocument(r, folder, "application/octet-stream", tmpName) ?: return@withLock
+        r.openOutputStream(tmp, "wt")!!.use(content)
+        entries.firstOrNull { it.name == name }?.let { DocumentsContract.deleteDocument(r, it.uri) }
+        DocumentsContract.renameDocument(r, tmp, name)
     }
 }

@@ -61,7 +61,7 @@ private fun SettingsHost(navigate: (String) -> Unit, content: @Composable (Env) 
     var dialog by remember { mutableStateOf<(@Composable (() -> Unit) -> Unit)?>(null) }
     val version = remember { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?" }
     val env = Env(
-        s = s, roots = roots,
+        ctx = ctx, s = s, roots = roots,
         set = { f -> scope.launch { app.prefs.update(f) } },
         navigate = navigate,
         snack = { m -> scope.launch { snackbar.showSnackbar(m) } },

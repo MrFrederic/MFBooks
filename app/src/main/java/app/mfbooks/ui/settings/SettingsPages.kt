@@ -2,27 +2,48 @@
 
 package app.mfbooks.ui.settings
 
+import android.content.Context
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
 import androidx.compose.material.icons.automirrored.rounded.LastPage
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ListItemShapes
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import app.mfbooks.data.AutoRewind
 import app.mfbooks.data.ColorSource
 import app.mfbooks.data.EndOfBook
+import app.mfbooks.data.MatchWhen
 import app.mfbooks.data.ProgressFormat
 import app.mfbooks.data.RootFolder
 import app.mfbooks.data.Settings
+import app.mfbooks.data.SpeechEnginePref
 import app.mfbooks.data.ThemeMode
 import app.mfbooks.playback.Command
+import app.mfbooks.text.Matching
+import app.mfbooks.ui.player.SheetBase
+import app.mfbooks.ui.text.langName
+import app.mfbooks.ui.text.megabytes
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 fun secs(s: Int) = if (s >= 60 && s % 60 == 0) "${s / 60} min" else "$s s"
 private fun title(s: String) = s.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
@@ -31,6 +52,7 @@ private fun snapSpeed(x: Float) = Math.round(x * 20) / 20f
 
 /** Everything a setting item needs: current values, writers and the dialog / navigation hooks of the hosting screen. */
 class Env(
+    val ctx: Context,
     val s: Settings,
     val roots: List<RootFolder>,
     val set: ((Settings) -> Settings) -> Unit,
@@ -52,6 +74,7 @@ enum class SettingsPage(val route: String, val title: String, val icon: ImageVec
     Interruptions("interruptions", "Interruptions & headset", Icons.Rounded.Headphones, "Calls, notifications, headset connect"),
     Controls("controls", "Controls", Icons.Rounded.TouchApp, "Skip sizes, buttons, headset"),
     Sleep("sleep", "Sleep timer", Icons.Rounded.Bedtime, "Duration, fade-out, shake"),
+    Reading("reading", "Reading", Icons.AutoMirrored.Rounded.MenuBook, "Read along, matching, speech models"),
     Server("server", "Server", Icons.Rounded.Cloud, "Sync, cloud library, devices"),
     Appearance("appearance", "Appearance", Icons.Rounded.Palette, "Theme, colours, player layout"),
     Storage("storage", "Storage & data", Icons.Rounded.Storage, "Convert to Opus, statistics"),
@@ -60,7 +83,7 @@ enum class SettingsPage(val route: String, val title: String, val icon: ImageVec
 
     companion object {
         fun of(route: String?) = entries.firstOrNull { it.route == route } ?: Library
-        val groups = listOf(listOf(Library, Playback, Interruptions, Controls, Sleep), listOf(Server, Appearance, Storage, Automation, About))
+        val groups = listOf(listOf(Library, Playback, Interruptions, Controls, Sleep, Reading), listOf(Server, Appearance, Storage, Automation, About))
     }
 }
 
@@ -199,6 +222,7 @@ fun Env.sections(page: SettingsPage): List<Section> = when (page) {
             toggle("Disable in car", s.disableSleepInCar, Icons.Rounded.DirectionsCar) { v -> set { it.copy(disableSleepInCar = v) } },
         )),
     )
+    SettingsPage.Reading -> readingSections()
     SettingsPage.Appearance -> listOf(
         Section("Look", listOf(
             choice("Theme", ThemeMode.entries.map { Choice(it, if (it == ThemeMode.BLACK) "Black (AMOLED)" else title(it.name)) }, s.theme, Icons.Rounded.DarkMode, "dark light night amoled") { v -> set { it.copy(theme = v) } },
@@ -228,6 +252,61 @@ fun Env.sections(page: SettingsPage): List<Section> = when (page) {
     )
     SettingsPage.Server -> emptyList() // its own screen (ui/server)
     SettingsPage.About -> listOf(Section(null, listOf(Item("MFBooks") { sh -> SettingRow(sh, "MFBooks", "Version $version", Icons.Rounded.Info) })))
+}
+
+private fun Env.readingSections(): List<Section> {
+    val android = Matching.androidEngineAvailable(ctx)
+    return listOf(
+        Section("While reading", listOf(
+            toggle("Follow narration", s.followNarration, Icons.Rounded.VerticalAlignCenter, keywords = "read along text scroll highlight") { v -> set { it.copy(followNarration = v) } },
+            toggle("Tap text to play from there", s.tapToSeek, Icons.Rounded.TouchApp, keywords = "read along seek") { v -> set { it.copy(tapToSeek = v) } },
+            toggle("Keep screen on", s.keepScreenReading, Icons.Rounded.WbSunny, keywords = "read along awake wake lock") { v -> set { it.copy(keepScreenReading = v) } },
+        )),
+        Section("Matching", listOf(
+            choice("Run matching", listOf(
+                Choice(MatchWhen.CHARGING, "While charging"),
+                Choice(MatchWhen.CHARGING_OR_BATTERY, "Charging or battery above threshold"),
+                Choice(MatchWhen.ANY, "Any time"),
+            ), s.matchWhen, Icons.Rounded.BatteryChargingFull, "text audio align sync") { v -> set { it.copy(matchWhen = v) } },
+            choice("Speech engine", listOfNotNull(
+                Choice(SpeechEnginePref.AUTO, "Automatic"),
+                Choice(SpeechEnginePref.ANDROID, "Android").takeIf { android },
+                Choice(SpeechEnginePref.VOSK, "Vosk"),
+            ), s.speechEngine.takeIf { android || it != SpeechEnginePref.ANDROID } ?: SpeechEnginePref.AUTO, Icons.Rounded.RecordVoiceOver, "recognition vosk") { v -> set { it.copy(speechEngine = v) } },
+            Item("Speech models", "vosk recognition download delete language") { sh -> SpeechModelsRow(sh) },
+            toggle("Offer text found in book folders", s.offerFolderText, Icons.Rounded.FindInPage, keywords = "fb2 epub ebook suggestion") { v -> set { it.copy(offerFolderText = v) } },
+            toggle("Save text in book folders", s.saveTextInFolders, Icons.Rounded.SaveAlt, keywords = "sidecar sync transcript backup") { v -> set { it.copy(saveTextInFolders = v) } },
+        )),
+    )
+}
+
+@Composable
+private fun Env.SpeechModelsRow(shapes: ListItemShapes) {
+    var rev by remember { mutableIntStateOf(0) }
+    val installed = remember(rev) { Matching.models(ctx).filter { it.installed } }
+    val summary = if (installed.isEmpty()) "None" else installed.joinToString(" and ") { langName(it.lang) } + ", " + megabytes(installed.sumOf { it.sizeBytes })
+    SettingRow(shapes, "Speech models", summary, Icons.Rounded.Download, onClick = { dialog { d -> SpeechModelsSheet(ctx, { rev++ }, d) } })
+}
+
+@Composable
+private fun SpeechModelsSheet(ctx: Context, onChanged: () -> Unit, dismiss: () -> Unit) {
+    var rev by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val installed = remember(rev) { Matching.models(ctx).filter { it.installed } }
+    SheetBase(dismiss, "Speech models") {
+        if (installed.isEmpty()) Text("None", style = MaterialTheme.typography.bodyLarge)
+        installed.forEach { m ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(langName(m.lang), style = MaterialTheme.typography.bodyLarge)
+                    Text(megabytes(m.sizeBytes), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton({ scope.launch { withContext(Dispatchers.IO) { Matching.deleteModel(ctx, m.lang) }; rev++; onChanged() } }) {
+                    Icon(Icons.Rounded.Delete, "Delete ${langName(m.lang)} model")
+                }
+            }
+        }
+    }
 }
 
 @Composable
