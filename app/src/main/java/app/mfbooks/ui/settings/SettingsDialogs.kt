@@ -28,16 +28,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
-class Choice<T>(val value: T, val label: String)
+class Choice<T>(val value: T, val label: String, val note: String? = null, val enabled: Boolean = true)
 
 @Composable
 private fun <T> RadioOption(c: Choice<T>, selected: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).selectable(selected, role = Role.RadioButton, onClick = onClick).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).selectable(selected, enabled = c.enabled, role = Role.RadioButton, onClick = onClick).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected, null, Modifier.padding(start = 8.dp))
-        Text(c.label, Modifier.padding(start = 16.dp, end = 8.dp).padding(vertical = 10.dp), style = MaterialTheme.typography.bodyLarge)
+        RadioButton(selected, null, Modifier.padding(start = 8.dp), enabled = c.enabled)
+        Column(Modifier.padding(start = 16.dp, end = 8.dp).padding(vertical = 10.dp)) {
+            Text(c.label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (c.enabled) 1f else 0.38f))
+            c.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
     }
 }
 

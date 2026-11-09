@@ -20,9 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -270,35 +268,45 @@ private fun Env.readingSections(): List<Section> {
                 Choice(MatchWhen.CHARGING_OR_BATTERY, "Charging or battery above threshold"),
                 Choice(MatchWhen.ANY, "Any time"),
             ), s.matchWhen, Icons.Rounded.BatteryChargingFull, "text audio align sync") { v -> set { it.copy(matchWhen = v) } },
-            choice("Speech engine", listOfNotNull(
-                Choice(SpeechEnginePref.AUTO, "Automatic"),
-                Choice(SpeechEnginePref.ANDROID, "Android").takeIf { android },
-                Choice(SpeechEnginePref.VOSK, "Vosk"),
-            ), s.speechEngine.takeIf { android || it != SpeechEnginePref.ANDROID } ?: SpeechEnginePref.AUTO, Icons.Rounded.RecordVoiceOver, "recognition vosk") { v -> set { it.copy(speechEngine = v) } },
-            Item("Speech models", "vosk recognition download delete language") { sh -> SpeechModelsRow(sh) },
+            Item("Speech engine", "recognition vosk android") { sh -> SpeechEngineRow(sh, android) },
+            Item("Vosk languages", "speech models vosk recognition download delete language") { sh -> VoskLanguagesRow(sh) },
             toggle("Offer text found in book folders", s.offerFolderText, Icons.Rounded.FindInPage, keywords = "fb2 epub ebook suggestion") { v -> set { it.copy(offerFolderText = v) } },
             toggle("Save text in book folders", s.saveTextInFolders, Icons.Rounded.SaveAlt, keywords = "sidecar sync transcript backup") { v -> set { it.copy(saveTextInFolders = v) } },
         )),
     )
 }
 
+/** Vosk can only be picked once a language is on the phone. */
 @Composable
-private fun Env.SpeechModelsRow(shapes: ListItemShapes) {
-    var rev by remember { mutableIntStateOf(0) }
-    val installed = remember(rev) { Matching.models(ctx).filter { it.installed } }
-    val summary = if (installed.isEmpty()) "None" else installed.joinToString(" and ") { langName(it.lang) } + ", " + megabytes(installed.sumOf { it.sizeBytes })
-    SettingRow(shapes, "Speech models", summary, Icons.Rounded.Download, onClick = { dialog { d -> SpeechModelsSheet(ctx, { rev++ }, d) } })
+private fun Env.SpeechEngineRow(shapes: ListItemShapes, android: Boolean) {
+    val version by Matching.modelsVersion.collectAsState()
+    val downloaded = remember(version) { Matching.models(ctx).filter { it.installed } }
+    val selected = remember(version, s.speechEngine) { Matching.effectiveEngine(ctx, s.speechEngine) }
+    val options = listOfNotNull(
+        Choice(SpeechEnginePref.AUTO, "Automatic"),
+        Choice(SpeechEnginePref.ANDROID, "Android", "Built in").takeIf { android },
+        Choice(SpeechEnginePref.VOSK, "Vosk", if (downloaded.isEmpty()) "Not downloaded" else downloaded.joinToString(", ") { langName(it.lang) }, enabled = downloaded.isNotEmpty()),
+    )
+    SettingRow(shapes, "Speech engine", options.first { it.value == selected }.label, Icons.Rounded.RecordVoiceOver,
+        onClick = { dialog { d -> ChoiceDialog("Speech engine", options, selected, { v -> d(); set { it.copy(speechEngine = v) } }, d) } })
 }
 
 @Composable
-private fun SpeechModelsSheet(ctx: Context, onChanged: () -> Unit, dismiss: () -> Unit) {
-    var rev by remember { mutableIntStateOf(0) }
+private fun Env.VoskLanguagesRow(shapes: ListItemShapes) {
+    val version by Matching.modelsVersion.collectAsState()
+    val downloaded = remember(version) { Matching.models(ctx).filter { it.installed } }
+    val summary = if (downloaded.isEmpty()) "None downloaded" else downloaded.joinToString(", ") { langName(it.lang) } + ", " + megabytes(downloaded.sumOf { it.sizeBytes })
+    SettingRow(shapes, "Vosk languages", summary, Icons.Rounded.Download, onClick = { dialog { d -> VoskLanguagesSheet(ctx, d) } })
+}
+
+@Composable
+private fun VoskLanguagesSheet(ctx: Context, dismiss: () -> Unit) {
+    val version by Matching.modelsVersion.collectAsState()
     val scope = rememberCoroutineScope()
     val downloads by Matching.downloads.collectAsState()
     val failed by Matching.downloadFailed.collectAsState()
-    LaunchedEffect(downloads.size) { rev++; onChanged() } // one finished
-    val models = remember(rev) { Matching.models(ctx) }
-    SheetBase(dismiss, "Speech models") {
+    val models = remember(version) { Matching.models(ctx) }
+    SheetBase(dismiss, "Vosk languages") {
         models.forEach { m ->
             val progress = downloads[m.lang]
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -306,14 +314,15 @@ private fun SpeechModelsSheet(ctx: Context, onChanged: () -> Unit, dismiss: () -
                     Text(langName(m.lang), style = MaterialTheme.typography.bodyLarge)
                     Text(when {
                         progress != null -> "Downloading, ${(progress * 100).toInt()}%"
+                        m.installed -> "Downloaded, ${megabytes(m.sizeBytes)}"
                         m.lang in failed -> "Download failed"
-                        else -> megabytes(m.sizeBytes)
+                        else -> "Not downloaded, ${megabytes(m.sizeBytes)}"
                     }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (m.installed) IconButton({ scope.launch { withContext(Dispatchers.IO) { Matching.deleteModel(ctx, m.lang) }; rev++; onChanged() } }) {
-                    Icon(Icons.Rounded.Delete, "Delete ${langName(m.lang)} model")
+                if (m.installed) IconButton({ scope.launch { withContext(Dispatchers.IO) { Matching.deleteModel(ctx, m.lang) } } }) {
+                    Icon(Icons.Rounded.Delete, "Delete ${langName(m.lang)}")
                 } else if (progress == null) IconButton({ Matching.downloadVosk(ctx, m.lang) }) {
-                    Icon(Icons.Rounded.Download, "Download ${langName(m.lang)} model")
+                    Icon(Icons.Rounded.Download, "Download ${langName(m.lang)}")
                 }
             }
         }

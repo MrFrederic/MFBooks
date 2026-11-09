@@ -415,10 +415,10 @@ Theme stays in Appearance. The reader follows the existing Light, Dark, Black an
 | Setting | Options | Default |
 |---|---|---|
 | Run matching | While charging, Charging or battery above threshold, Any time | While charging |
-| Speech engine | Automatic, Android, Vosk. Android is hidden on phones that can't use it. | Automatic |
+| Speech engine | Automatic, Android, Vosk. Android is hidden on phones that can't use it. Vosk can't be selected until a language is downloaded. | Automatic |
 | Offer text found in book folders | On, Off | On |
 | Save text and sync in book folders | On, Off | On |
-| Speech models | List with size and delete | none installed |
+| Vosk languages | Each language shows Downloaded or Not downloaded, with download or delete | none downloaded |
 
 **Per book, on the Text & sync screen**
 

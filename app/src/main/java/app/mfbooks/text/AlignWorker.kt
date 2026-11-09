@@ -102,7 +102,8 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
             if (!RecognizerSlots.permits.tryAcquire()) throw RetryLater("Waiting for another book to finish matching")
             var engine: SpeechEngine? = null
             try {
-                var current = openEngine(settings.speechEngine, row.lang, doc, tracks, audioMs, engineName).also { engine = it }
+                val pref = Matching.effectiveEngine(applicationContext, settings.speechEngine)
+                var current = openEngine(pref, row.lang, doc, tracks, audioMs, engineName).also { engine = it }
                 engineName = current.name
                 PcmReader(applicationContext, tracks) { isStopped }.use { reader ->
                     for (c in plan) {
@@ -110,7 +111,7 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
                         setState(TextState.ALIGNING, null) // also heals a state lost in a stop/replace race
                         val pcm = reader.read(c.fromMs.toLong(), c.untilMs.toLong())
                         val words = try { current.transcribe(pcm) } catch (f: SpeechFailure) {
-                            if (settings.speechEngine != SpeechEnginePref.AUTO || current is VoskEngine) throw f
+                            if (pref != SpeechEnginePref.AUTO || current is VoskEngine) throw f
                             Log.w(TAG, "$bookId: Android engine failed mid-job (${f.kind}), switching to Vosk")
                             current.close()
                             current = openVosk(row.lang).also { engine = it }

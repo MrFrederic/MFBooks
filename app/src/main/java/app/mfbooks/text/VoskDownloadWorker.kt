@@ -35,6 +35,7 @@ class VoskDownloadWorker(context: Context, params: WorkerParameters) : Coroutine
                 val pct = (f * 100).toInt()
                 if (pct != shown) { shown = pct; nm.notify(NOTIFICATION_ID, foreground(pct).notification) }
             }
+            Matching.modelsVersion.update { it + 1 }
             inputData.getString(KEY_BOOK)?.let { Matching.enqueue(applicationContext, it, true) }
             return Result.success()
         } catch (e: CancellationException) { throw e } catch (e: IOException) {

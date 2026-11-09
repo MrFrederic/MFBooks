@@ -1,6 +1,7 @@
 package app.mfbooks.text
 
 import android.content.Context
+import app.mfbooks.data.SpeechEnginePref
 import app.mfbooks.MFBooksApp
 import app.mfbooks.data.TextState
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +21,8 @@ object Matching {
     const val NEEDS_VOSK = "needs-vosk"
     /** Language to fraction done, for each Vosk download in progress. */
     val downloads = MutableStateFlow<Map<String, Float>>(emptyMap())
+    /** Goes up whenever a Vosk language appears or disappears. */
+    val modelsVersion = MutableStateFlow(0)
     /** Languages whose last download failed. */
     val downloadFailed = MutableStateFlow<Set<String>>(emptySet())
 
@@ -83,5 +86,15 @@ object Matching {
     fun models(context: Context): List<SpeechModelInfo> =
         ModelStore.specs.map { val on = ModelStore.installed(context, it); SpeechModelInfo(it.lang, it.name, if (on) it.sizeBytes else ModelStore.downloadBytes(context, it), on) }
 
-    fun deleteModel(context: Context, lang: String): Unit = ModelStore.delete(context, lang)
+    fun deleteModel(context: Context, lang: String) {
+        ModelStore.delete(context, lang)
+        modelsVersion.update { it + 1 }
+    }
+
+    /** The saved choice, or Automatic if that engine isn't on this phone (Vosk deleted, or a setting synced from another device). */
+    fun effectiveEngine(context: Context, pref: SpeechEnginePref): SpeechEnginePref = when {
+        pref == SpeechEnginePref.VOSK && ModelStore.specs.none { ModelStore.installed(context, it) } -> SpeechEnginePref.AUTO
+        pref == SpeechEnginePref.ANDROID && !androidEngineAvailable(context) -> SpeechEnginePref.AUTO
+        else -> pref
+    }
 }
