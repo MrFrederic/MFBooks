@@ -150,6 +150,7 @@ class AlignWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
     private suspend fun openEngine(pref: SpeechEnginePref, lang: String, doc: BookTextDoc, tracks: List<Track>, audioMs: Int, lastEngine: String?): SpeechEngine {
         val locale = localeOf(lang)
         val android = if (Build.VERSION.SDK_INT >= 34 && locale != null && androidRecognizerAvailable(applicationContext)) AndroidEngine(applicationContext, locale) else null
+        if (android == null) Log.i(TAG, "$bookId: no on-device recogniser for this phone or language")
         return when (pref) {
             SpeechEnginePref.VOSK -> openVosk(lang, confirmed = true)
             SpeechEnginePref.ANDROID -> {
