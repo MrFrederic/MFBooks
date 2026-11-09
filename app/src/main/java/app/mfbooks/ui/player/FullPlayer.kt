@@ -3,6 +3,10 @@
 package app.mfbooks.ui.player
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -227,118 +231,120 @@ fun FullPlayer(onCollapse: () -> Unit, onOpenBook: (String) -> Unit, onSettings:
         onConnect = if (link != null) { { connect = true } } else null)
 
     Box(modifier.fillMaxSize().background(cs.background)) {
-        // Same blurred-cover haze as the book page, stretched over the whole player.
-        if (textView) {
-            // A short glow only: a wash behind the text muddies the narrated and upcoming greys.
-            val glow = LocalGlow.current
-            val tint = book.seedColor?.let { comfortable(Color(it), glow.dark) } ?: glow.color
-            if (!focus) Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to tint.copy(alpha = if (glow.dark) 0.45f else 0.3f), 0.36f to Color.Transparent)))
-        } else CoverBackdrop(book.coverUri, book.seedColor, Modifier.fillMaxSize())
-        if (textView && readable != null) {
-            Column(Modifier.fillMaxSize().statusBarsPadding().then(if (focus) Modifier else Modifier.navigationBarsPadding().padding(bottom = 8.dp))) {
-                if (focus) FocusHeader(chapterTitle, !locked, onExit = { focus = false }, onReadingSettings = { sheet = Sheet.Reading })
-                else {
-                    TextToolRow(np, locked, actions, onCollapse, onCover = { textChosen.value = false }, onReadingSettings = { sheet = Sheet.Reading }, onFocus = { focus = true })
-                    Box(Modifier.padding(horizontal = 16.dp)) { PlayingOnStrip() }
+        // One frame for both views: everything above and below the stage stays put, only the stage and the haze change.
+        val haze by animateFloatAsState(if (textView) 0f else 1f, tween(280), label = "haze")
+        val glow = LocalGlow.current
+        val tint = book.seedColor?.let { comfortable(Color(it), glow.dark) } ?: glow.color
+        // A short glow only behind text: a full wash muddies the narrated and upcoming greys.
+        if (!focus) Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - haze }.background(Brush.verticalGradient(0f to tint.copy(alpha = if (glow.dark) 0.45f else 0.3f), 0.36f to Color.Transparent)))
+        if (!focus) CoverBackdrop(book.coverUri, book.seedColor, Modifier.fillMaxSize().graphicsLayer { alpha = haze })
+        Column(Modifier.fillMaxSize().statusBarsPadding().then(if (focus) Modifier else Modifier.navigationBarsPadding().padding(bottom = 8.dp))) {
+            AnimatedVisibility(focus, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                FocusHeader(chapterTitle, !locked, onExit = { focus = false }, onReadingSettings = { sheet = Sheet.Reading })
+            }
+            AnimatedVisibility(!focus, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    ToolRow(np, locked, onCollapse, actions)
+                    PlayingOnStrip()
+                    if (readable != null) Box(Modifier.fillMaxWidth().height(48.dp), Alignment.Center) {
+                        ViewSwitch(textView, onChange = { textChosen.value = it }, Modifier.align(Alignment.Center))
+                        // Fades, so the row keeps its layout in both views.
+                        val reading by animateFloatAsState(if (textView) 1f else 0f, label = "readingTools")
+                        if (reading > 0f) Row(Modifier.align(Alignment.CenterEnd).graphicsLayer { alpha = reading }) {
+                            AaButton(textView && !locked) { sheet = Sheet.Reading }
+                            HoldIconButton({ focus = true }, {}, "Focus reading", 44.dp, RoundedCornerShape(16.dp), Color.Transparent, Modifier.size(44.dp, 48.dp), enabled = textView && !locked) {
+                                Icon(Icons.Rounded.CenterFocusStrong, null)
+                            }
+                        }
+                    }
+
+                    // Whole-book block: title, thin progress bar, "Read x of y · n% · Left z".
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(listOfNotNull(book.author, book.title).joinToString(" – "), Modifier.basicMarquee(), style = MaterialTheme.typography.titleMediumEmphasized,
+                            maxLines = 1, textAlign = TextAlign.Center)
+                        LinearWavyProgressIndicator(
+                            progress = { if (np.bookDurationMs > 0) (np.positionInBookMs.toFloat() / np.bookDurationMs).coerceIn(0f, 1f) else 0f },
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            amplitude = { if (np.isPlaying) 1f else 0f },
+                        )
+                        Text(bookProgressText(np, settings.progressFormat, tracks.size), Modifier.padding(top = 6.dp).semantics { contentDescription = "Book progress" },
+                            style = MaterialTheme.typography.bodyMedium.merge(tnum), color = cs.onSurface.copy(alpha = 0.85f), maxLines = 1, textAlign = TextAlign.Center)
+                    }
                 }
-                CompositionLocalProvider(LocalSnackbar provides readerSnackbar) {
+            }
+
+            AnimatedContent(
+                textView && readable != null, Modifier.weight(1f).fillMaxWidth(), label = "stage",
+                transitionSpec = { (fadeIn(tween(220, 60)) + scaleIn(tween(260), initialScale = 0.97f)) togetherWith fadeOut(tween(100)) },
+            ) { showText ->
+                if (showText && readable != null) CompositionLocalProvider(LocalSnackbar provides readerSnackbar) {
                     Reader(
                         book, readable, tracks, settings, locked,
                         anchor = if (sheet == Sheet.Reading) READING_SHEET_ANCHOR else FOLLOW_ANCHOR,
                         bottomInset = if (focus) 100.dp else 18.dp,
-                        modifier = Modifier.weight(1f).fillMaxWidth().then(if (settings.keepScreenReading && np.isPlaying) Modifier.keepScreenOn() else Modifier),
+                        modifier = Modifier.fillMaxSize().then(if (settings.keepScreenReading && np.isPlaying) Modifier.keepScreenOn() else Modifier),
                     )
-                }
-                if (!focus) Column(Modifier.padding(horizontal = 16.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        val h = 44.dp
-                        HoldIconButton(actions.onSleep, actions.onSleepLong, "Sleep timer. Long press to toggle", h, RoundedCornerShape(16.dp),
-                            if (np.sleep.mode != SleepMode.Off) cs.primary else Color.Transparent, enabled = !locked) { SleepGlyph(np) }
-                        PickerRow(chapterTitle, MaterialTheme.typography.titleMedium, chevron = !locked, onClick = actions.onChapters, modifier = Modifier.weight(1f))
-                        HoldIconButton(actions.onSpeed, actions.onSpeedLong, "Playback speed ${speedLabel(np.speed)}. Long press to toggle", h, RoundedCornerShape(16.dp),
-                            if (np.speed != 1f) cs.primary else Color.Transparent, Modifier.height(h).widthIn(min = 56.dp), enabled = !locked) {
-                            Text(speedLabel(np.speed), style = MaterialTheme.typography.labelLarge.merge(tnum), maxLines = 1)
+                } else {
+                    // Cover fills whatever height is left. Tap = play/pause; swipe left/right = chapter, down = collapse.
+                    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+                        val side = minOf(maxWidth, maxHeight, 440.dp)
+                        Box(Modifier.size(side), contentAlignment = Alignment.Center) {
+                            Cover(
+                                book.coverUri, book.title, book.seedColor,
+                                Modifier
+                                    .size(side)
+                                    .shadow(24.dp, RoundedCornerShape(32.dp), ambientColor = Color.Black, spotColor = Color.Black)
+                                    .clip(RoundedCornerShape(32.dp))
+                                    .clickable(remember { MutableInteractionSource() }, null, onClickLabel = if (np.isPlaying) "Pause" else "Play") { player.playPause() }
+                                    .pointerInput(locked) {
+                                        var dx = 0f; var dy = 0f
+                                        detectDragGestures(onDragStart = { dx = 0f; dy = 0f }, onDragEnd = {
+                                            when {
+                                                abs(dy) > abs(dx) && dy > 120f -> onCollapse()
+                                                locked -> Unit
+                                                dx < -100f -> player.nextChapter()
+                                                dx > 100f -> player.prevChapter()
+                                            }
+                                        }) { _, d -> dx += d.x; dy += d.y }
+                                    },
+                                corner = 32.dp,
+                            )
+                            val glyph by animateFloatAsState(if (!np.isPlaying && !np.isBuffering) 1f else 0f, label = "playGlyph")
+                            Box(Modifier.size(84.dp).graphicsLayer { alpha = glyph; scaleX = 0.8f + 0.2f * glyph; scaleY = scaleX }
+                                .clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)), Alignment.Center) {
+                                Icon(Icons.Rounded.PlayArrow, null, Modifier.size(52.dp), tint = Color.White)
+                            }
                         }
                     }
-                    ChapterSeek(np, enabled = !locked)
-                    TextTransport(np, settings, locked, actions.onChapters)
                 }
             }
-            if (focus) {
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(200.dp).background(Brush.verticalGradient(0f to Color.Transparent, 0.58f to cs.background)))
-                FocusPill(np, book.title, settings, locked, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 16.dp))
-            }
-            SnackbarHost(readerSnackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = if (focus) 92.dp else 214.dp))
-        } else Column(
-            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            ToolRow(np, locked, onCollapse, actions)
-            PlayingOnStrip()
-            if (readable != null) ViewSwitch(text = false, onChange = { textChosen.value = it }, Modifier.padding(top = 4.dp))
 
-            // Whole-book block: title, thin progress bar, "Read x of y · n% · Left z".
-            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(listOfNotNull(book.author, book.title).joinToString(" – "), Modifier.basicMarquee(), style = MaterialTheme.typography.titleMediumEmphasized,
-                    maxLines = 1, textAlign = TextAlign.Center)
-                LinearWavyProgressIndicator(
-                    progress = { if (np.bookDurationMs > 0) (np.positionInBookMs.toFloat() / np.bookDurationMs).coerceIn(0f, 1f) else 0f },
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                    amplitude = { if (np.isPlaying) 1f else 0f },
-                )
-                Text(bookProgressText(np, settings.progressFormat, tracks.size), Modifier.padding(top = 6.dp).semantics { contentDescription = "Book progress" },
-                    style = MaterialTheme.typography.bodyMedium.merge(tnum), color = cs.onSurface.copy(alpha = 0.85f), maxLines = 1, textAlign = TextAlign.Center)
-            }
-
-            // Cover fills whatever height is left. Tap = play/pause; swipe left/right = chapter, down = collapse.
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                val side = minOf(maxWidth, maxHeight, 440.dp)
-                Box(Modifier.size(side), contentAlignment = Alignment.Center) {
-                    Cover(
-                        book.coverUri, book.title, book.seedColor,
-                        Modifier
-                            .size(side)
-                            .shadow(24.dp, RoundedCornerShape(32.dp), ambientColor = Color.Black, spotColor = Color.Black)
-                            .clip(RoundedCornerShape(32.dp))
-                            .clickable(remember { MutableInteractionSource() }, null, onClickLabel = if (np.isPlaying) "Pause" else "Play") { player.playPause() }
-                            .pointerInput(locked) {
-                                var dx = 0f; var dy = 0f
-                                detectDragGestures(onDragStart = { dx = 0f; dy = 0f }, onDragEnd = {
-                                    when {
-                                        abs(dy) > abs(dx) && dy > 120f -> onCollapse()
-                                        locked -> Unit
-                                        dx < -100f -> player.nextChapter()
-                                        dx > 100f -> player.prevChapter()
-                                    }
-                                }) { _, d -> dx += d.x; dy += d.y }
-                            },
-                        corner = 32.dp,
-                    )
-                    val glyph by animateFloatAsState(if (!np.isPlaying && !np.isBuffering) 1f else 0f, label = "playGlyph")
-                    Box(Modifier.size(84.dp).graphicsLayer { alpha = glyph; scaleX = 0.8f + 0.2f * glyph; scaleY = scaleX }
-                        .clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)), Alignment.Center) {
-                        Icon(Icons.Rounded.PlayArrow, null, Modifier.size(52.dp), tint = Color.White)
+            AnimatedVisibility(!focus, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    // File and chapter pickers. Locked: chevrons and prev/next vanish; the chapter row still opens the chapter list.
+                    val file = tracks.getOrNull(np.chapter?.trackIndex ?: 0)?.fileName
+                    if (file != null) PickerRow(file, MaterialTheme.typography.bodyMedium, chevron = !locked && tracks.size > 1,
+                        onClick = if (!locked && tracks.size > 1) ({ openLists(ListTab.Files) }) else null)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        if (!locked) HoldIconButton(player::prevChapter, { openLists(ListTab.Chapters) }, "Previous chapter", 44.dp, RoundedCornerShape(16.dp), cs.onSurface.copy(alpha = 0.10f)) {
+                            Icon(Icons.Rounded.SkipPrevious, null, Modifier.size(24.dp))
+                        }
+                        PickerRow(chapterTitle, MaterialTheme.typography.titleLarge, chevron = !locked, onClick = { openLists(ListTab.Chapters) }, modifier = Modifier.weight(1f))
+                        if (!locked) HoldIconButton(player::nextChapter, { openLists(ListTab.Chapters) }, "Next chapter", 44.dp, RoundedCornerShape(16.dp), cs.onSurface.copy(alpha = 0.10f)) {
+                            Icon(Icons.Rounded.SkipNext, null, Modifier.size(24.dp))
+                        }
                     }
+
+                    ChapterSeek(np, enabled = !locked)
+                    Transport(np, settings, locked)
                 }
             }
-
-            // File and chapter pickers. Locked: chevrons and prev/next vanish; the chapter row still opens the chapter list.
-            val file = tracks.getOrNull(np.chapter?.trackIndex ?: 0)?.fileName
-            if (file != null) PickerRow(file, MaterialTheme.typography.bodyMedium, chevron = !locked && tracks.size > 1,
-                onClick = if (!locked && tracks.size > 1) ({ openLists(ListTab.Files) }) else null)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (!locked) HoldIconButton(player::prevChapter, { openLists(ListTab.Chapters) }, "Previous chapter", 44.dp, RoundedCornerShape(16.dp), cs.onSurface.copy(alpha = 0.10f)) {
-                    Icon(Icons.Rounded.SkipPrevious, null, Modifier.size(24.dp))
-                }
-                PickerRow(chapterTitle, MaterialTheme.typography.titleLarge, chevron = !locked, onClick = { openLists(ListTab.Chapters) }, modifier = Modifier.weight(1f))
-                if (!locked) HoldIconButton(player::nextChapter, { openLists(ListTab.Chapters) }, "Next chapter", 44.dp, RoundedCornerShape(16.dp), cs.onSurface.copy(alpha = 0.10f)) {
-                    Icon(Icons.Rounded.SkipNext, null, Modifier.size(24.dp))
-                }
-            }
-
-            ChapterSeek(np, enabled = !locked)
-            Transport(np, settings, locked)
         }
+        if (textView && focus) {
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(200.dp).background(Brush.verticalGradient(0f to Color.Transparent, 0.58f to cs.background)))
+            FocusPill(np, book.title, settings, locked, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 16.dp))
+        }
+        if (textView) SnackbarHost(readerSnackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = if (focus) 92.dp else 270.dp))
 
         // Transient confirmation (e.g. bookmark added); sits under the tool row.
         AnimatedVisibility(toast != null, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 118.dp, start = 24.dp, end = 24.dp),
@@ -475,57 +481,6 @@ private fun AaButton(enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-/**
- * Tool row in text view: collapse, Cover/Text, Aa, overflow. Everything the cover's row offers is in the overflow; when
- * locked that is only the unlock.
- * ponytail: Cast stays a real route button inside the menu, since Media3 exposes only the button.
- */
-@Composable
-private fun TextToolRow(np: NowPlaying, locked: Boolean, a: ToolActions, onCollapse: () -> Unit, onCover: () -> Unit, onReadingSettings: () -> Unit, onFocus: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val castAvailable = remember { CastSupport.init(context) }
-    Row(
-        Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 4.dp)
-            .pointerInput(Unit) { var dy = 0f; detectDragGestures(onDragStart = { dy = 0f }, onDragEnd = { if (dy > 80f) onCollapse() }) { _, d -> dy += d.y } },
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        HoldIconButton(onCollapse, {}, "Collapse player", 48.dp, RoundedCornerShape(16.dp), Color.Transparent) { Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(28.dp)) }
-        ViewSwitch(text = true, onChange = { if (!it) onCover() })
-        Row {
-            AaButton(!locked, onReadingSettings)
-            Box {
-                HoldIconButton({ menu = true }, {}, "More options", 44.dp, RoundedCornerShape(16.dp), Color.Transparent, Modifier.size(44.dp, 48.dp)) { Icon(Icons.Rounded.MoreVert, null) }
-                DropdownMenu(menu, { menu = false }, shape = RoundedCornerShape(20.dp)) {
-                    @Composable fun item(text: String, icon: ImageVector, trailing: Boolean = false, onClick: () -> Unit) = DropdownMenuItem(
-                        { Text(text) }, { menu = false; onClick() }, leadingIcon = { Icon(icon, null) },
-                        trailingIcon = if (trailing) { { Icon(Icons.Rounded.Check, "On") } } else null)
-                    if (locked) item("Unlock controls", Icons.Rounded.Lock, onClick = a.onLock)
-                    else {
-                        item("Focus reading", Icons.Rounded.CenterFocusStrong, onClick = onFocus)
-                        item("Chapters", Icons.AutoMirrored.Rounded.FormatListBulleted, onClick = a.onChapters)
-                        item("Bookmarks", Icons.Rounded.Bookmarks, onClick = a.onBookmarks)
-                        item("Add bookmark", Icons.Rounded.BookmarkAdd, onClick = a.onBookmarkAdd)
-                        item("Add bookmark with note", Icons.Rounded.BookmarkAdd, onClick = a.onAddWithNote)
-                        item("Volume boost", Icons.AutoMirrored.Rounded.VolumeUp, trailing = np.boostMb > 0, onClick = a.onBoost)
-                        item("Equalizer", Icons.Rounded.Equalizer, onClick = a.onEq)
-                        item("Skip silence", Icons.Rounded.GraphicEq, trailing = np.skipSilence, onClick = a.onSkipSilence)
-                        item("History", Icons.Rounded.History, onClick = a.onHistory)
-                        item("Lock controls", Icons.Rounded.LockOpen, onClick = a.onLock)
-                        a.onConnect?.let { item("Devices", Icons.Rounded.Devices, onClick = it) }
-                        if (castAvailable) Row(Modifier.padding(horizontal = 4.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                            CastButton(Modifier.size(48.dp))
-                            Text("Cast", style = MaterialTheme.typography.bodyLarge)
-                        }
-                        item("Book details", Icons.AutoMirrored.Rounded.MenuBook, onClick = a.onDetails)
-                        item("Settings", Icons.Rounded.Settings, onClick = a.onSettings)
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun FocusHeader(title: String, settingsEnabled: Boolean, onExit: () -> Unit, onReadingSettings: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -635,25 +590,6 @@ private fun Transport(np: NowPlaying, s: Settings, locked: Boolean) {
             if (!locked) SkipButton(secLabel(s.fwdBigSec), "Forward ${secLabel(s.fwdBigSec)}", 50.dp * k, 92.dp * k, container, { player.skipBy(s.fwdBigSec * 1000L) }) {
                 Icon(Icons.Rounded.FastForward, null, Modifier.size(24.dp * k))
             }
-        }
-    }
-}
-
-/** Text view's transport: chapter skips outside, small skips (long press = big skip) next to play. Locked: only play/pause. */
-@Composable
-private fun TextTransport(np: NowPlaying, s: Settings, locked: Boolean, onChapters: () -> Unit) {
-    val player = MFBooksApp.get(LocalContext.current).player
-    val container = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        val k = (maxWidth / 340.dp).coerceIn(0.8f, 1.15f)
-        Row(Modifier.fillMaxWidth().animateContentSize(), horizontalArrangement = if (locked) Arrangement.Center else Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            if (!locked) HoldIconButton(player::prevChapter, onChapters, "Previous chapter", 56.dp * k, RoundedCornerShape(16.dp), container) { Icon(Icons.Rounded.SkipPrevious, null, Modifier.size(24.dp * k)) }
-            if (!locked) HoldIconButton({ player.skipBy(-s.rewindSmallSec * 1000L) }, { player.skipBy(-s.rewindBigSec * 1000L) }, "Rewind ${secLabel(s.rewindSmallSec)}. Long press: ${secLabel(s.rewindBigSec)}",
-                62.dp * k, RoundedCornerShape(20.dp), container) { SeekIcon(s.rewindSmallSec, forward = false, desc = null, size = 28.dp * k) }
-            PlayButton(np, 76.dp * k, 36.dp * k, RoundedCornerShape(24.dp))
-            if (!locked) HoldIconButton({ player.skipBy(s.fwdSmallSec * 1000L) }, { player.skipBy(s.fwdBigSec * 1000L) }, "Forward ${secLabel(s.fwdSmallSec)}. Long press: ${secLabel(s.fwdBigSec)}",
-                62.dp * k, RoundedCornerShape(20.dp), container) { SeekIcon(s.fwdSmallSec, forward = true, desc = null, size = 28.dp * k) }
-            if (!locked) HoldIconButton(player::nextChapter, onChapters, "Next chapter", 56.dp * k, RoundedCornerShape(16.dp), container) { Icon(Icons.Rounded.SkipNext, null, Modifier.size(24.dp * k)) }
         }
     }
 }
