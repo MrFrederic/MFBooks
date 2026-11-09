@@ -17,6 +17,7 @@ import android.speech.SpeechRecognizer
 import android.util.Log
 import androidx.annotation.RequiresApi
 import app.mfbooks.data.Track
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -200,6 +201,7 @@ class AndroidEngine(private val context: Context, private val locale: String) : 
             support.pendingOnDeviceLanguages.has() -> throw SpeechFailure(SpeechFailure.Kind.LANGUAGE, "The language pack for $locale is still downloading")
             !support.supportedOnDeviceLanguages.has() -> throw SpeechFailure(SpeechFailure.Kind.LANGUAGE, "This phone has no on-device recogniser for $locale")
         }
+        delay(SERVICE_RESTART_MS) // binding straight after the check above gets ERROR_SERVER_DISCONNECTED on a Pixel 9 Pro
         withRecognizer<Unit>(context, DOWNLOAD_TIMEOUT_MS, "Language pack download") { rec, done ->
             rec.triggerModelDownload(intent, context.mainExecutor, object : ModelDownloadListener {
                 override fun onProgress(completedPercent: Int) {}
@@ -223,6 +225,7 @@ class AndroidEngine(private val context: Context, private val locale: String) : 
     private companion object {
         const val CHECK_TIMEOUT_MS = 10_000L
         const val DOWNLOAD_TIMEOUT_MS = 5 * 60_000L
+        const val SERVICE_RESTART_MS = 1_500L
         const val SESSION_MARGIN_MS = 30_000L
     }
 }

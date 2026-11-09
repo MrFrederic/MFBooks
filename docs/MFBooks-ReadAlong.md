@@ -315,6 +315,15 @@ Emulator speed says little about a phone.
 | Android on-device, 5× feed | 3 min 37 s | 1,925 | 80% | 99% |
 | Vosk small | about 2 min at most | 2,159 | 86% | 99% |
 
+Russian 20 min book, same phone:
+
+| Engine | Time for the book | Words heard | Book words matched | Synced audio |
+|---|---|---|---|---|
+| Android on-device, 5× feed | 5 min 50 s, including a 47 MB language pack | 2,023 | 73% | 100% |
+| Vosk small | under 3 min, including its model download | not counted | 85% | 100% |
+
+The reader on this phone: median frame 9 ms, 2.6% janky frames, highlight and playhead aligned.
+
 Word timing between the two engines differs by a median of 110 ms. Feeding the recogniser with no pacing lost about 90% of the speech, which is why the feed is limited. File input works without `RECORD_AUDIO`. The app must declare `android.speech.RecognitionService` in `<queries>`, or the recogniser looks unavailable.
 
 **Android engine questions the spike must answer**, separately for ru-RU and en-US:
