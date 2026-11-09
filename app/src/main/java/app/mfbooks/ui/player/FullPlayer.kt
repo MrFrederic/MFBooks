@@ -3,10 +3,9 @@
 package app.mfbooks.ui.player
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.material.icons.automirrored.rounded.Article
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.Image
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
@@ -398,17 +397,15 @@ private fun ToolRow(np: NowPlaying, locked: Boolean, onCollapse: () -> Unit, a: 
             .pointerInput(Unit) { var dy = 0f; detectDragGestures(onDragStart = { dy = 0f }, onDragEnd = { if (dy > 80f) onCollapse() }) { _, d -> dy += d.y } },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val m = Modifier.size(h)
+        val compact = LocalConfiguration.current.screenWidthDp < 380 // the labelled switch needs the room on narrow phones
+        val m = Modifier.size(if (compact) 40.dp else h, h)
         HoldIconButton(onCollapse, {}, "Collapse player", h, RoundedCornerShape(16.dp), none, m) { Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(28.dp)) }
-        if (hasText) ViewSwitch(textView, onViewChange)
-        Spacer(Modifier.weight(1f))
         HoldIconButton(a.onSleep, a.onSleepLong, "Sleep timer. Long press to toggle", h, RoundedCornerShape(16.dp), if (np.sleep.mode != SleepMode.Off) cs.primary else none, m, enabled = !locked) { SleepGlyph(np) }
         HoldIconButton(a.onLock, {}, if (locked) "Unlock controls" else "Lock controls", h, RoundedCornerShape(16.dp), if (locked) cs.errorContainer else none, m,
             content = if (locked) cs.error else null) {
             Icon(if (locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen, null, Modifier.size(22.dp))
         }
         if (a.onConnect != null) HoldIconButton(a.onConnect, {}, "Devices", h, RoundedCornerShape(16.dp), none, m) { Icon(Icons.Rounded.Devices, null, Modifier.size(22.dp)) }
-        else CastButton(m)
         Box(m) {
             HoldIconButton({ menu = true }, {}, "More options", h, RoundedCornerShape(16.dp), none, Modifier.fillMaxWidth().height(h), enabled = !locked) {
                 Icon(Icons.Rounded.MoreVert, null)
@@ -432,12 +429,14 @@ private fun ToolRow(np: NowPlaying, locked: Boolean, onCollapse: () -> Unit, a: 
                 item("History", Icons.Rounded.History, onClick = a.onHistory)
                 item("Book details", Icons.AutoMirrored.Rounded.MenuBook, onClick = a.onDetails)
                 item("Settings", Icons.Rounded.Settings, onClick = a.onSettings)
-                if (a.onConnect != null && castAvailable) Row(Modifier.padding(horizontal = 4.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (castAvailable) Row(Modifier.padding(horizontal = 4.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                     CastButton(Modifier.size(48.dp))
                     Text("Cast", style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
+        Spacer(Modifier.weight(1f))
+        if (hasText) ViewSwitch(textView, onViewChange, compact)
     }
 }
 
@@ -457,17 +456,18 @@ private fun SleepGlyph(np: NowPlaying) {
     }
 }
 
-/** Connected Cover / Text icons, shown only for books that have a text. */
+/** Connected Cover / Text group, shown only for books that have a text. */
 @Composable
-private fun ViewSwitch(text: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+private fun ViewSwitch(text: Boolean, onChange: (Boolean) -> Unit, compact: Boolean, modifier: Modifier = Modifier) {
+    val pad = if (compact) 14.dp else 18.dp
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
         ToggleButton(!text, { onChange(false) }, Modifier.height(40.dp).semantics { role = Role.Tab },
-            shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(), contentPadding = PaddingValues(horizontal = 12.dp)) {
-            Icon(Icons.Rounded.Image, "Cover", Modifier.size(20.dp))
+            shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(), contentPadding = PaddingValues(horizontal = pad)) {
+            Text("Cover", style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
         ToggleButton(text, { onChange(true) }, Modifier.height(40.dp).semantics { role = Role.Tab },
-            shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(), contentPadding = PaddingValues(horizontal = 12.dp)) {
-            Icon(Icons.AutoMirrored.Rounded.Article, "Text", Modifier.size(20.dp))
+            shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(), contentPadding = PaddingValues(horizontal = pad + 2.dp)) {
+            Text("Text", style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
 }
