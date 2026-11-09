@@ -306,7 +306,16 @@ Text works for any book with a `serverId`, including books whose audio was never
 | Android engine | File input worked without `RECORD_AUDIO`, 60 s of audio took about 2 s, text was good, but no word timings (`RECOGNITION_PARTS` absent), so the probe fell back to Vosk | No on-device ru-RU recogniser, fell back to Vosk |
 | Vosk small | 13 min in about 80 s, 86% of book words matched, 99% of audio synced | Whole 20 min text synced, 85% of book words matched |
 
-Emulator speed says little about a phone. Questions 1 and 5 below are answered for this image. The rest need a real device.
+Emulator speed says little about a phone.
+
+**Pixel 9 Pro, Android 17, English 13 min book, 2026-11-09:**
+
+| Engine | Time for the book | Words heard | Book words matched | Synced audio |
+|---|---|---|---|---|
+| Android on-device, 5× feed | 3 min 37 s | 1,925 | 80% | 99% |
+| Vosk small | about 2 min at most | 2,159 | 86% | 99% |
+
+Word timing between the two engines differs by a median of 110 ms. Feeding the recogniser with no pacing lost about 90% of the speech, which is why the feed is limited. File input works without `RECORD_AUDIO`. The app must declare `android.speech.RecognitionService` in `<queries>`, or the recogniser looks unavailable.
 
 **Android engine questions the spike must answer**, separately for ru-RU and en-US:
 
